@@ -1,0 +1,58 @@
+:root {
+  --bg: #0b1020;
+  --fg: #e6ebff;
+  --muted: #9aa3b2;
+  --accent: #5aa7ff;
+  --panel: #1f3ea5ff;
+  --handle: #ffffff;
+  --shadow: 0 10px 25px rgba(0,0,0,.3);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, Noto Sans; }
+
+#app { position: fixed; inset: 0; display: grid; grid-template-rows: 1fr; }
+#map { width: 100%; height: 100%; }
+
+header {
+  position: fixed; top: 12px; left: 12px; right: 12px; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; border-radius: 14px; background: rgba(0, 45, 179, 0.7);
+  backdrop-filter: blur(8px); box-shadow: var(--shadow);
+}
+header h1 {
+  font-size: clamp(16px, 2.5vw, 20px);
+  margin: 0;
+  font-weight: 650;
+  letter-spacing: .2px;
+}
+.status-text {
+  font-size: 14px;
+  color: var(--muted);
+}
+/* change for pull */
+/* Slide-up panel */
+#panel {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; color: var(--fg);
+  background: var(--panel); border-top-left-radius: 16px; border-top-right-radius: 16px;
+  box-shadow: 0 -20px 40px rgba(0,0,0,.35);
+  transform: translateY(62%);
+  transition: transform .35s cubic-bezier(.2,.8,.2,1);
+  touch-action: none;
+}
+#panel.open { transform: translateY(0%); }
+#panel .handle { height: 40px; display: grid; place-items: center; cursor: grab; }
+#panel .pill { width: 44px; height: 5px; border-radius: 99px; background: var(--handle); }
+#panel .content { padding: 8px 16px 24px 16px; max-height: min(70vh, 580px); overflow: auto; }
+#panel h2 { margin: 6px 0 10px; font-size: 16px; color: #cbd7ff; text-transform: uppercase; letter-spacing: .12em; }
+
+.timetable { width: 100%; border-collapse: collapse; font-size: 14px; }
+.timetable th, .timetable td { padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,.08); text-align: left; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 14px; }
+.chip { padding: 6px 10px; border-radius: 999px; background: #1f2c5e; color: #cdd6ff; font-size: 12px; }
+
+@media (max-width: 640px) {
+  header { padding: 8px 12px; }
+  .status-text { font-size: 12px; }
+}

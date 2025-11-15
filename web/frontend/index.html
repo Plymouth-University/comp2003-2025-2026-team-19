@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stonehouse to Cremyll Mount Edgcumbe Ferry</title>
+  <meta name="description" content="Live tracking for the Stonehouse to Cremyll Mount Edgcumbe Ferry." />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="map" role="application" aria-label="Ferry route map"></div>
+  </div>
+
+  <header>
+    <h1>Stonehouse to Cremyll Mount Edgcumbe Ferry</h1>
+    <div id="statusText" class="status-text">Status: —</div>
+  </header>
+
+  <section id="panel" aria-label="Timetables and information" aria-expanded="false">
+    <div class="handle" id="panelHandle" aria-controls="panel" aria-label="Expand details" tabindex="0">
+      <div class="pill"></div>
+    </div>
+    <div class="content">
+      <h2>Timetable</h2>
+      <div class="chips">
+        <span class="chip">Route: Stonehouse ↔ Cremyll</span>
+        <span class="chip">Vessel: EDGCUMBE BELLE</span>
+      </div>
+
+      <table class="timetable" aria-label="Departures and arrivals">
+        <thead>
+          <tr><th>Departure</th><th>From</th><th>Arrival</th><th>To</th></tr>
+        </thead>
+        <tbody id="timetableBody">
+          <tr><td>08:00</td><td>Stonehouse</td><td>08:08</td><td>Cremyll</td></tr>
+          <tr><td>08:15</td><td>Cremyll</td><td>08:23</td><td>Stonehouse</td></tr>
+        </tbody>
+      </table>
+
+      <h2>About</h2>
+      <p>This live tracking page displays the current position of the Stonehouse–Cremyll Ferry via Google Maps. The ferry’s position will update every 10 seconds.</p>
+    </div>
+  </section>
+
+  <script src="app.js"></script>
+  
+  <!-- change for pull -->
+<!-- Replace "API_KEY" with the Google Maps API key -->
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key=API_KEY&callback=initMap"></script>
+</body>
+</html>
