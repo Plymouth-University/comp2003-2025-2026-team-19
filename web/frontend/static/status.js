@@ -103,4 +103,27 @@ function updateFerryPosition() {
   status.textContent = `Last updated: ${time}`;
 }
 
+// Boat Image
+// 200 OK
+const boatData = {
+    "entity_id": "entity_id",
+    "name": "Entity Name",
+    "image_url": "https://example.com/image",
+    "route": {
+        "route_id": "route_id",
+        "start": {
+            "destination_id": "destination_id",
+            "destination_name": "Destination Name",
+            "lat": 40.6892,
+            "long": -74.0445
+        },
+        "end": {
+            "destination_id": "destination_id",
+            "destination_name": "Destination Name",
+            "lat": 40.7580,
+            "long": -73.9855
+        }
+    }
+}
+
 window.initMap = initMap;

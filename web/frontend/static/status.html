@@ -17,6 +17,28 @@
     <div id="statusText" class="status-text">Status: —</div>
   </header>
 
+  <section id="boatLocation" aria-label="Boat Location & Destination" aria-expanded="false">
+  <div class="boatJourney" id="boatData" aria-controls="panel" aria-label="Boatdest" tabindex="0">
+    <script>
+       document.getElementById("boatData").innerHTML +=
+       `<p>${boatData.name}</p>
+       <img src="${boatData.image_url}">
+       <p>Route: ${boatData.route}</p>
+       <p>Route ID: ${boatData.route.route_id}</p>
+       <br>
+       <p>Start: ${boatData.route.start.destination_name}</p>
+       <p>Latitude: ${boatData.route.start.lat}</p>
+       <p>Longitude: ${boatData.route.start.long}</p>
+       <br>
+       <p>End: ${boatData.route.end.destination_name}</p> 
+       <p>Latitude: ${boatData.route.end.lat}</p>
+       <p>Longitude: ${boatData.route.end.long}</p>
+       `;
+    </script>
+   </div>
+  </section>
+
+
   <section id="panel" aria-label="Timetables and information" aria-expanded="false">
     <div class="handle" id="panelHandle" aria-controls="panel" aria-label="Expand details" tabindex="0">
       <div class="pill"></div>
