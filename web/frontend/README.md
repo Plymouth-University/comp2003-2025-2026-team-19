@@ -20,4 +20,6 @@ docker and docker-compose must be installed
 
 3. Access the web application at [http://localhost:3000](http://localhost:3000)
 
+**! IMPORTANT !** - You will need to rebuild each time you make changes to see any updates
+
 ## Notes
