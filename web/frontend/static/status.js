@@ -103,4 +103,46 @@ function updateFerryPosition() {
   status.textContent = `Last updated: ${time}`;
 }
 
+// Boat data JSON
+// 200 OK
+const boatData = {
+    "entity_id": "entity_id",
+    "name": "Entity Name",
+    "image_url": "https://example.com/image",
+    "route": {
+        "route_id": "route_id",
+        "start": {
+            "destination_id": "destination_id",
+            "destination_name": "Destination Name",
+            "lat": 40.6892,
+            "long": -74.0445
+        },
+        "end": {
+            "destination_id": "destination_id",
+            "destination_name": "Destination Name",
+            "lat": 40.7580,
+            "long": -73.9855
+        }
+    }
+}
+
+//Updates boat's data by getting the required element
+//Needs to be updated later with API calls
+function updateBoatData(boatData) {
+    document.getElementById("nameId").textContent = boatData.name;
+    document.getElementById("routeId").textContent = boatData.route.route_id;
+    
+    document.getElementById("startDestinationNameId").textContent = boatData.route.start.destination_name;
+    document.getElementById("startDestinationLatId").textContent = boatData.route.start.lat;
+    document.getElementById("startDestinationLongId").textContent = boatData.route.start.long;
+
+    document.getElementById("endDestinationNameId").textContent = boatData.route.end.destination_name;
+    document.getElementById("endDestinationLatId").textContent = boatData.route.end.lat;
+    document.getElementById("endDestinationLongId").textContent = boatData.route.end.long;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    updateBoatData(boatData);
+});
+
 window.initMap = initMap;

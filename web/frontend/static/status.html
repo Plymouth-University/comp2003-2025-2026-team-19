@@ -22,12 +22,23 @@
       <div class="pill"></div>
     </div>
     <div class="content">
-      <h2>Timetable</h2>
+      <h3>Current Ferry Status</h3>
       <div class="chips">
-        <span class="chip">Route: Stonehouse ↔ Cremyll</span>
-        <span class="chip">Vessel: EDGCUMBE BELLE</span>
+        <span class="chip">Vessel: <span id="nameId"></span></span>
+        <span class="chip">Route: <span id="routeId"></span></span>
       </div>
-
+      <div class="chips">
+        <span class="chip">Starts at: <span id="startDestinationNameId"></span></span>
+        <span class="chip">Latitude: <span id="startDestinationLatId"></span></span>
+        <span class="chip">Longitude: <span id="startDestinationLongId"></span></span>
+      </div>
+      <div class="chips">
+        <span class="chip">Ends at: <span id="endDestinationNameId"></span></span>
+        <span class="chip">Latitude: <span id="endDestinationLatId"></span></span>
+        <span class="chip">Longitude: <span id="endDestinationLongId"></span></span>
+      </div>
+      
+      <h2>Timetable</h2>
       <table class="timetable" aria-label="Departures and arrivals">
         <thead>
           <tr><th>Departure</th><th>From</th><th>Arrival</th><th>To</th></tr>
