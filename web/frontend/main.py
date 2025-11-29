@@ -16,13 +16,16 @@ app.mount("/static", static, name="static")
 
 
 @app.get("/")
-async def get_root():
+async def get_root(
+     request: fastapi.Request):
     """Returns a welcome message or the index page.
     Returns:
         dict: A welcome message.
     """
-    return {"message": "Welcome to the ferrytracker Web Backend!"}
-
+    return templates.TemplateResponse(
+        "entity_list.html", {"request": request}
+    )
+    
     # TODO: Return index.html template
     # return templates.TemplateResponse("index.html", {"request": request})
 
