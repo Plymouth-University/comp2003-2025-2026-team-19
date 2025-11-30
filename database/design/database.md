@@ -1,39 +1,43 @@
 ```mermaid
 erDiagram
-    entities ||--|{ attributes : has_attribute
-    locations ||--|{ attributes : has_attribute
+    polymorphic_parents ||--o{ entities : inherits
+    polymorphic_parents ||--o{ locations : inherits
+    polymorphic_parents ||--|{ attributes : has_attribute
 
     entities ||--|{ positions : reports
     
     routes ||--|{ locations : starts_at
     routes ||--|{ locations : ends_at
     
-    entities {
-        uuid uuid PK
-        string(100) name
+    polymorphic_parents {
+        uuid id PK
         enum type
-        string(255) image 
-        string(500) description 
     }
     attributes {
         integer id PK
         uuid parent_id FK
-        enum parent_type
         string(100) key
         string(255) value
         enum value_type
+    }
+    entities {
+        uuid id PK,FK "References polymorphic_parents"
+        string(100) name
+        enum type
+        string(255) image
+        string(500) description
+    }
+    locations {
+        uuid id PK,FK "References polymorphic_parents"
+        geometry geom "PostGIS POINT (4326)"
+        string(100) name
+        enum type
     }
     positions {
         integer id PK
         uuid entity_id FK
         geometry geom "PostGIS POINT (4326)"
         datetime timestamp
-    }
-    locations {
-        uuid id PK
-        geometry geom "PostGIS POINT (4326)"
-        string(100) name
-        enum type
     }
     routes {
         uuid id PK
