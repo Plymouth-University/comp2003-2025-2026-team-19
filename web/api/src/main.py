@@ -8,11 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database import Base, engine, get_db_session
+from .routes import entity
 
 load_dotenv()
 
 sentry_sdk.init(
     dsn=os.getenv("SENTRY_DSN"),
+    environment=os.getenv("SENTRY_ENVIRONMENT", "development"),
     send_default_pii=True,
     # Enable sending logs to Sentry
     enable_logs=True,
@@ -36,6 +38,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+app.include_router(entity.router)
 
 
 async def create_db_tables():
