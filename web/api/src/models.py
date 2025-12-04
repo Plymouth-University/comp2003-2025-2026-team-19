@@ -27,6 +27,8 @@ class Entity(Base):
     type: Mapped[str] = mapped_column(String(50), nullable=False)
     image_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    active: Mapped[bool] = mapped_column(default=True, nullable=False)
+
     attributes: Mapped[list["Attribute"]] = relationship(
         "Attribute",
         back_populates="entity",
@@ -38,6 +40,9 @@ class Entity(Base):
         back_populates="entity",
         passive_deletes=True,
     )
+
+    def __repr__(self) -> str:
+        return f"<Entity id={str(self.id)!r} name={self.name!r} type={self.type!r}>"
 
 
 class Attribute(Base):
