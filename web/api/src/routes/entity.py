@@ -37,7 +37,7 @@ async def get_entity(
 
 
 @router.get("/entities")
-async def list_entities(db: AsyncSession = Depends(get_db_session)):
+async def get_entities(db: AsyncSession = Depends(get_db_session)):
     """List all active entities.
 
     An entity is considered active if its 'active' attribute is set to True.
