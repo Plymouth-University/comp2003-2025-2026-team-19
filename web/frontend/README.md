@@ -1,6 +1,20 @@
 # Web frontend
 
-## Running the web server
+## Running the web server for development
+
+### Prerequisites
+
+uvicorn must be installed:
+
+```sh
+python -m pip install uvicorn
+```
+
+```sh
+python -m uvicorn main:app --port 3001 --host 0.0.0.0
+```
+
+## Running the web server in production
 
 ### Prerequisites
 
