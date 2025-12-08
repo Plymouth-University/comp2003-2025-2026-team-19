@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Stonehouse to Cremyll Mount Edgcumbe Ferry</title>
   <meta name="description" content="Live tracking for the Stonehouse to Cremyll Mount Edgcumbe Ferry." />
+
+ <!-- Map: MapLibre CSS -->
+<link
+    rel="stylesheet"
+    href="https://unpkg.com/maplibre-gl@3.5.0/dist/maplibre-gl.css"
+  />
+
   <link rel="stylesheet" href="/static/status.css" />
 </head>
 <body>
@@ -39,14 +46,14 @@
       </table>
 
       <h2>About</h2>
-      <p>This live tracking page displays the current position of the Stonehouse-Cremyll Ferry via Google Maps. The ferry's position will update every 10 seconds.</p>
+      <p>This live tracking page displays the current position of the Stonehouse-Cremyll Ferry via OpenStreetMap. The ferry's position will update every 10 seconds.</p>
     </div>
   </section>
-
-  <script src="/static/status.js"></script>
   
-  <!-- change for pull -->
-<!-- Replace "API_KEY" with the Google Maps API key -->
-  <script async defer src="https://maps.googleapis.com/maps/api/js?key=API_KEY&callback=initMap"></script>
+<!-- Map: MapLibre JS -->
+<script src="https://unpkg.com/maplibre-gl@3.5.0/dist/maplibre-gl.js"></script>
+
+<script src="/static/status.js"></script>
+
 </body>
 </html>
