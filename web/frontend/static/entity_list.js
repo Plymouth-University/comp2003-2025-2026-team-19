@@ -76,7 +76,15 @@ function updateEntityList(entity_list) {
   });
 }
 
-//Calls function alongside the entity list
-document.addEventListener("DOMContentLoaded", () => {
-updateEntityList(entity_list);
-})
+//Manages the dropdown behaviour when the button is clicked to show the entity list
+function dropDown() {
+    const entityContainer = document.getElementById("entity_list_container");
+    const buttonText = document.getElementById("toggler");
+    buttonText.textContent = "Show ferries";
+    entityContainer.classList.toggle("show");
+    if (entityContainer.classList.contains("show")) {
+      buttonText.textContent = "Hide Ferries";
+      updateEntityList(entity_list);
+    }
+}
+  
