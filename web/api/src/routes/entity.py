@@ -1,51 +1,35 @@
 import uuid
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..crud import read_all_active_entities, read_entity_by_id
-from ..database import get_db_session
+from core import models
+from core.database import AsyncSession, get_db_session
+from web.api.src import crud
 
-router = APIRouter()
+router = APIRouter(tags=["entity"], prefix="/entities")
 
 
-@router.get("/entities/{entity_id}")
-async def get_entity(
-    entity_id: str, db: AsyncSession = Depends(get_db_session)
-) -> dict:
-    """Get an entity by its ID."""
-    entity = await read_entity_by_id(db, uuid.UUID(entity_id))
-
-    if not entity:
+def validate_entity_uuid(entity_id: str) -> UUID:
+    try:
+        obj_uuid = uuid.UUID(entity_id)
+    except ValueError:
+        # Treat malformed UUID as 404
         raise HTTPException(status_code=404, detail="Entity not found")
-
-    return {
-        "id": str(entity.id),
-        "name": entity.name,
-        "description": entity.description,
-        "type": entity.type,
-        "image_url": entity.image_url,
-        "attributes": [
-            {
-                "key": attr.key,
-                "value": attr.value,
-                "value_type": attr.value_type,
-            }
-            for attr in entity.attributes
-        ],
-    }
+    return obj_uuid
 
 
-@router.get("/entities")
-async def get_entities(db: AsyncSession = Depends(get_db_session)):
-    """List all active entities.
+@router.get("")
+async def list_entities(db: AsyncSession = Depends(get_db_session)):
+    return await crud.list_entities(db)
 
-    An entity is considered active if its 'active' attribute is set to True.
-    Active entities may have an associated route attached to them, indicated by the presence of a non-null 'route_id' attribute.
-    """
-    result = await read_all_active_entities(db)
-    result = [
-        {"id": str(entity.id), "name": entity.name, "type": entity.type}
-        for entity in result
-    ]
-    return result
+
+@router.get("/{entity_id}")
+async def get_entity(
+    entity_id: UUID = Depends(validate_entity_uuid),
+    db: AsyncSession = Depends(get_db_session),
+):
+    try:
+        return await crud.get_entity_by_uuid(db, entity_id)
+    except crud.EntityNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e

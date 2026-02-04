@@ -7,14 +7,15 @@ from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .database import Base, engine, get_db_session
-from .routes import entity
+from core.database import Base, engine, get_db_session
+
+from .routes import entity_router, health_router
 
 load_dotenv()
 
 sentry_sdk.init(
     dsn=os.getenv("SENTRY_DSN"),
-    environment=os.getenv("SENTRY_ENVIRONMENT", "development"),
+    environment=os.getenv("SENTRY_ENVIRONMENT", "dev"),
     send_default_pii=True,
     # Enable sending logs to Sentry
     enable_logs=True,
@@ -33,16 +34,10 @@ sentry_sdk.init(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager to handle startup and shutdown events."""
-    await create_db_tables()
     yield
 
 
 app = FastAPI(lifespan=lifespan)
 
-app.include_router(entity.router)
-
-
-async def create_db_tables():
-    """Create all tables defined in models.py on startup"""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+app.include_router(health_router)
+app.include_router(entity_router)

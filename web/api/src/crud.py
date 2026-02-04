@@ -1,35 +1,38 @@
-import uuid
+from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from .models import Attribute, Entity
+from core.database import AsyncSession
+from core.models import Entity, EntityOnRoute
+
+from .exceptions import EntityNotFoundError
+from .schema.entity import ReadEntity
 
 
-async def read_entity_by_id(db: AsyncSession, entity_id: uuid.UUID) -> Entity | None:
-    """Read an entity by its ID."""
-    result = await db.execute(
+async def get_entity_by_uuid(db: AsyncSession, entity_id: UUID) -> ReadEntity:
+    stmt = (
         select(Entity)
-        .where(Entity.id == entity_id)
-        .join(Entity.attributes)
-        .options(selectinload(Entity.attributes))
+        .options(
+            selectinload(Entity.attributes),
+            selectinload(Entity.current_route).selectinload(EntityOnRoute.route),
+        )
+        .where(Entity.uuid == entity_id)
     )
-    entity = result.scalars().first()
 
-    if not entity:
-        return None
+    result = await db.execute(stmt)
+    entity = result.scalar_one_or_none()
 
-    return entity
-
-
-async def read_all_entities(db: AsyncSession) -> list[Entity]:
-    """Read all entities."""
-    result = await db.execute(select(Entity))
-    return result.scalars().all()  # type: ignore
+    if entity is not None:
+        return ReadEntity.model_validate(entity)
+    raise EntityNotFoundError("Entity not found")
 
 
-async def read_all_active_entities(db: AsyncSession) -> list[Entity]:
-    """Read all active entities."""
-    result = await db.execute(select(Entity).where(Entity.active == True))
-    return result.scalars().all()  # type: ignore
+async def list_entities(db: AsyncSession) -> list[ReadEntity]:
+    stmt = select(Entity).options(
+        selectinload(Entity.attributes),
+        selectinload(Entity.current_route).selectinload(EntityOnRoute.route),
+    )
+    result = await db.execute(stmt)
+    entities = result.scalars().all()
+    return [ReadEntity.model_validate(entity) for entity in entities]
