@@ -1,46 +1,79 @@
 ```mermaid
 erDiagram
-    FERRY {
-        int ferry_id PK
+    direction LR
+    Entity {
+        integer id pk
+        UUID uuid
         string name
+        string description
     }
-    GPS_DATA {
-        int gps_id PK
-        int ferry_id FK
-        float latitude
-        float longitude
-        datetime timestamp
+
+    EntityAttribute {
+        integer id pk
+        integer parent_id fk
+        string key
+        string value
+        string datatype
     }
-    API_SERVER {
-        int api_id PK
-        string endpoint_url
+
+    EntityOnRoute {
+        integer id pk
+        integer entity_id fk
+        integer route_id fk
     }
-    FERRY ||--o{ GPS_DATA : "generates"
-    GPS_DATA }o--|| API_SERVER : "stored by"
-    RASPBERRY_PI {
-        int device_id PK
-        string ip_address
+
+    Route {
+        integer id pk
+        integer start_id fk
+        integer end_id fk
+        integer inverse fk
     }
-    PROCESSED_DATA {
-        int process_id PK
-        int gps_id FK
-        float progress_percent
+
+    RouteAttribute {
+        integer id pk
+        integer parent_id fk
+        string key
+        string value
+        string datatype
     }
-    API_SERVER ||--o{ RASPBERRY_PI : "accessed by"
-    RASPBERRY_PI ||--o{ PROCESSED_DATA : "converts to"
-    MICROCONTROLLER {
-        int controller_id PK
-        string connection_type
+
+    RouteStop {
+        integer id pk
+        integer route_id fk
+        integer location_id fk
+        integer stop_order
     }
-    DISPLAY_ELEMENTS {
-        int element_id PK
-        string type
+
+    Location {
+        integer id
+        string name
+        GEOGRAPHY geog
     }
-    PHYSICAL_DISPLAY {
-        int display_id PK
-        string location
+
+    LocationAttribute {
+        integer id pk
+        integer parent_id fk
+        string key
+        string value
+        string datatype
     }
-    PROCESSED_DATA }o--|| MICROCONTROLLER : "sent to"
-    MICROCONTROLLER ||--o{ DISPLAY_ELEMENTS : "controls"
-    DISPLAY_ELEMENTS }o--|| PHYSICAL_DISPLAY : "part of"
+
+    Point {
+        integer id pk
+        integer route_id
+        GEOGRAPHY geog
+        integer next fk
+    }
+
+    Entity }o--|| EntityOnRoute : "assigned to"
+    EntityOnRoute }o--|| Route : "assigned to"
+    Entity ||--o{ EntityAttribute : has
+
+    Location ||--o{ LocationAttribute : has
+
+    Route }o--|{ Location : has
+    Route ||--o{ RouteStop : has
+    RouteStop ||--|| Location : has
+    Route ||--o{ Point : "described by"
+    Route ||--o{ RouteAttribute : has
 ```
