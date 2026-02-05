@@ -2,7 +2,15 @@ import datetime
 import uuid
 
 from geoalchemy2 import Geometry, WKBElement
-from sqlalchemy import ForeignKey, Index, Integer, String, UniqueConstraint, func
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,6 +59,7 @@ class GPSTelemetry(Base):
         Integer, ForeignKey("Entity.id", ondelete="CASCADE"), nullable=False
     )
     timestamp: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
         nullable=False,
         server_default=func.now(),
