@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -9,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import Base, engine, get_db_session
 
-from .routes import entity_router, health_router
+from .routes import entity_router, health_router, websocket_router
+from .routes.websockets import redis_listener
 
 load_dotenv()
 
@@ -34,10 +36,13 @@ sentry_sdk.init(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager to handle startup and shutdown events."""
+    task = asyncio.create_task(redis_listener())
     yield
+    task.cancel()
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, root_path="/api/v1")
 
 app.include_router(health_router)
+app.include_router(websocket_router)
 app.include_router(entity_router)
