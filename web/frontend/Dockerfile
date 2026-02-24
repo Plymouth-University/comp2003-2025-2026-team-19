@@ -1,21 +1,24 @@
-FROM python:3.13-slim
+FROM python:3.14-alpine AS builder
 
-# Set working directory
+RUN apk add --no-cache gcc musl-dev libffi-dev
+
+RUN pip install poetry
+
+WORKDIR /build
+COPY pyproject.toml poetry.lock ./
+
+RUN poetry config virtualenvs.in-project true \
+    && poetry install --only main --no-interaction --no-ansi --no-root
+
+FROM python:3.14-alpine
 WORKDIR /app
 
-# Environment
-ENV PYTHONUNBUFFERED=1
+COPY --from=builder /build/.venv /app/.venv
 
-# Install pip dependencies
-COPY requirements.txt ./
-RUN pip install --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -r requirements.txt
+COPY ./web/frontend /app
+COPY ./core /app/core
 
-# Copy application code
-COPY . /app
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH=/app
 
-# Expose the port the app runs on
-EXPOSE 8000
-
-# Run the app with uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
