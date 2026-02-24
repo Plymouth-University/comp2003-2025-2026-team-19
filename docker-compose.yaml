@@ -4,9 +4,10 @@ services:
     db:
         image: postgis/postgis:18-3.6-alpine
         env_file:
-            - ./database/.env
+            - .env
         volumes:
-            - postgres:/var/lib/postgresql/data
+            - ferrytracker_postgres:/var/lib/postgresql/data
+            - ./database/scripts/01-init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh
         ports:
             - "5432:5432"
         healthcheck:
@@ -15,15 +16,54 @@ services:
             timeout: 2s
             retries: 5
             start_period: 20s
+    redis:
+        image: redis:8.6-alpine
+        ports:
+            - "6379:6379"
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 10s
+            retries: 3
     api:
-        build: ./api
+        build:
+            context: .
+            dockerfile: ./web/api/Dockerfile
         env_file:
-            - ./api/.env
+            - .env
         depends_on:
             db:
                 condition: service_healthy
+        # ports:
+        #     - "8080:8080"
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+            interval: 10s
+            retries: 3
+
+    ingestion-server:
+        build:
+            context: .
+            dockerfile: ./ingestion/server/Dockerfile
+        env_file:
+            - .env
+        environment:
+            - SERVICE_TYPE=ingestion
+        depends_on:
+            db:
+                condition: service_healthy
+        # ports:
+        #     - "8081:8080"
+
+    gateway:
+        build: ./nginx
         ports:
-            - "8000:8000"
+            - "20003:80"
+        depends_on:
+            # api:
+            #     condition: service_healthy
+            ingestion-server:
+                condition: service_started
+
 
 volumes:
-    postgres:
+    ferrytracker_postgres:
