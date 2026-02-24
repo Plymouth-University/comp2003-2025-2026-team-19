@@ -13,7 +13,14 @@ dependencies = [
     "sqlalchemy (>=2.0.46,<3.0.0)",
     "pydantic-settings (>=2.12.0,<3.0.0)",
     "geoalchemy2 (>=0.18.1,<0.19.0)",
-    "sentry-sdk (>=2.51.0,<3.0.0)"
+    "sentry-sdk (>=2.51.0,<3.0.0)",
+    "passlib[argon2] (>=1.7.4,<2.0.0)",
+    "fastapi (>=0.128.0,<0.129.0)",
+    "uvicorn (>=0.40.0,<0.41.0)",
+    "asyncpg (>=0.31.0,<0.32.0)",
+    "websockets (>=16.0,<17.0)",
+    "redis (>=7.2.0,<8.0.0)",
+    "shapely (>=2.1.2,<3.0.0)"
 ]
 
 [tool.poetry]
@@ -25,11 +32,6 @@ requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [dependency-groups]
-api = [
-    "fastapi (>=0.128.0,<0.129.0)",
-    "uvicorn (>=0.40.0,<0.41.0)",
-    "asyncpg (>=0.31.0,<0.32.0)"
-]
 dev = [
     "pytest (>=9.0.2,<10.0.0)",
     "alembic (>=1.18.3,<2.0.0)",
