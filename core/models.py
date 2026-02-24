@@ -2,7 +2,15 @@ import datetime
 import uuid
 
 from geoalchemy2 import Geometry, WKBElement
-from sqlalchemy import ForeignKey, Index, Integer, String, UniqueConstraint, func
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,6 +59,7 @@ class GPSTelemetry(Base):
         Integer, ForeignKey("Entity.id", ondelete="CASCADE"), nullable=False
     )
     timestamp: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
         nullable=False,
         server_default=func.now(),
@@ -203,3 +212,22 @@ class RouteStop(Base):
 
     route: Mapped["Route"] = relationship(back_populates="stops")
     location: Mapped["Location"] = relationship()
+
+
+class APIKey(Base):
+    __tablename__ = "APIKey"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    prefix: Mapped[str] = mapped_column(String(12), index=True, nullable=False)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+        server_default=func.now(),
+    )
+    allowed_entity_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("Entity.id"), nullable=True
+    )
+    allowed_entity: Mapped["Entity"] = relationship("Entity")

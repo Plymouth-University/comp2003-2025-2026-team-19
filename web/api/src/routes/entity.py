@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from core import models
 from core.database import AsyncSession, get_db_session
-from web.api.src import crud
+
+from .. import crud
 
 router = APIRouter(tags=["entity"], prefix="/entities")
 
