@@ -46,6 +46,15 @@ async def get_status(
     )
 
 
+@app.get("/health")
+async def get_health():
+    """Return a health check message.
+    Returns:
+        dict: A message indicating the service is healthy.
+    """
+    return {"message": "Service is healthy"}
+
+
 if __name__ == "__main__":
     import uvicorn
 

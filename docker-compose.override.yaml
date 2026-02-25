@@ -1,0 +1,41 @@
+services:
+  api:
+    command: ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+    develop:
+      watch:
+        - action: sync
+          path: ./web/api/src
+          target: /app/src
+        - action: sync
+          path: ./core
+          target: /app/core
+        - action: rebuild
+          path: pyproject.toml
+
+  frontend:
+    command: ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+    develop:
+      watch:
+        - action: sync
+          path: ./web/frontend
+          target: /app
+          ignore:
+            - .venv/
+        - action: sync
+          path: ./core
+          target: /app/core
+        - action: rebuild
+          path: pyproject.toml
+
+  ingestion-server:
+    command: ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+    develop:
+      watch:
+        - action: sync
+          path: ./ingestion/server/src
+          target: /app/src
+        - action: sync
+          path: ./core
+          target: /app/core
+        - action: rebuild
+          path: pyproject.toml
