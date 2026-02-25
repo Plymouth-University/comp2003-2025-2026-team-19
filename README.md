@@ -14,7 +14,9 @@
     ```
     $ docker compose up --build --watch
     ```
-3. Make changes, containers will sync/rebuild where necessary
+3. Access the server at http://127.0.0.1:20003
+4. Make changes, containers will sync/rebuild where necessary
+
 
 ---
 <details>
