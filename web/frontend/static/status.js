@@ -332,7 +332,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Websocket stuff
 
-export function TrackerWS({
+//Used for initialising the object
+const tracker = TrackerWS({
+  onUpdate: (id, lat, lng, ts) => {
+
+    if (!boatMarker) return;
+
+    boatMarker.setLngLat([lng, lat]);
+
+    const v = vessels.find(v => v.id === id);
+    if (v) {
+      v.eta = "Live Update";
+      v.speed = 8.0;
+    }
+
+    renderSidebar();
+  },
+
+  onStatus: (s) => console.log("status", s),
+  onError: (e) => console.error("err", e),
+});
+
+tracker.subscribe(["e7bce45c-9927-41f7-8af8-2f69f5dfbf2e"]);
+
+//Websocket connection function
+function TrackerWS({
   baseUrl = "",
   onUpdate,
   onStatus = () => {},
@@ -353,16 +377,19 @@ export function TrackerWS({
 
   const wsUrl = makeWsUrl("/api/v1/entities/ws");
 
+  //Used for connecting to websocket
+
   function connect() {
     ws = new WebSocket(wsUrl);
     ws.addEventListener("open", () => {
       onStatus({ type: "connected" });
-      
+
       if (subscribedIds.length) {
         subscribe(subscribedIds);
       }
   });
-
+  
+  //Listens for any messages
   ws.addEventListener("message", (event) => {
     let msg;
     try {
@@ -372,12 +399,12 @@ export function TrackerWS({
       return;
     }
   
-  //Server check
+  //Server Check
   if (msg.status === "subscribed") {
     onStatus({ type: "subscribed", entity_ids: msg.entity_ids });
     return;
   }
-
+  
   //Location updates
   if (msg.type === "update" && msg.data) {
     const { entity_id, latitude, longitude, timestamp } = msg.data;
@@ -393,7 +420,7 @@ export function TrackerWS({
     }
     return;
   }
-  
+
   onStatus({ type: "unknown_message", msg });
 });
 
@@ -407,13 +434,16 @@ export function TrackerWS({
   });
 }
 
+//Subscribes to the entity id
 function subscribe(entityIds) {
-  subscribedIds = Array.from(new Set(entityIds));
+  subscribedIds = Array.from(new Set (entityIds));
 
   const payload = {
     action: "subscribe",
     entity_ids: subscribedIds,
   };
+
+  console.log("Sending the", payload)
 
   if (!ws) {
     connect();
@@ -428,18 +458,23 @@ function subscribe(entityIds) {
     );
     return
   }
-  
+
   if (ws.readyState !== WebSocket.OPEN) return;
   ws.send(JSON.stringify(payload));
 }
 
+//Used for disconnect
 function disconnect() {
-  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-    ws.close();
-  }
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState ===
+    WebSocket.CONNECTING)) {
+      ws.close();
+    }
   ws = null;
 }
   window.addEventListener("pagehide", () => disconnect());
 
   return { connect, subscribe, disconnect };
 }
+
+
+
