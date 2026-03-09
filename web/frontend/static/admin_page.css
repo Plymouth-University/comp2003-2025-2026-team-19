@@ -1,0 +1,25 @@
+:root {
+  --bg: #0b1020;
+  --fg: #e6ebff;
+  --muted: #9aa3b2;
+  --accent: #5aa7ff;
+  --panel: rgba(0, 30, 100, 0.82);
+  --panel2: rgba(0, 30, 100, 0.82);
+  --stroke: rgba(255,255,255,.08);
+  --handle: #ffffff;
+  --shadow: 0 12px 32px rgba(0,0,0,.45);
+
+  --green:#22c55e;
+  --amber:#f59e0b;
+  --red:#ef4444;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, Noto Sans;
+}
+

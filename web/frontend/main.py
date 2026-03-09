@@ -45,6 +45,15 @@ async def get_status(
         "status.html", {"request": request, "entity_id": entity_id}
     )
 
+@app.get("/admin/{entity_id}")
+async def get_status(
+    request: fastapi.Request, entity_id: str
+) -> fastapi.responses.HTMLResponse:
+
+    return templates.TemplateResponse(
+        "admin_page.html", {"request": request, "entity_id": entity_id}
+    )
+
 
 @app.get("/health")
 async def get_health():
