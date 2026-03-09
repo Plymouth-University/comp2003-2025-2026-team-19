@@ -66,6 +66,12 @@ function getFitPadding() {
   return { top: 90, bottom: 80, left: 340, right: 70 };
 }
 
+//Used for obtaining UUID from url
+function entityIdUrl() {
+  const pathUrl = window.location.pathname.split("/");
+  return pathUrl[pathUrl.length - 1];
+}
+
 // --------------------
 // SIDEBAR RENDER
 // --------------------
@@ -264,7 +270,7 @@ function initMap() {
     renderSidebar();
 
     // Updates every 10s (same behavior as server)
-    setInterval(updateFerryPosition, 10000);
+    //setInterval(updateFerryPosition, 10000); (Disabled for now)
   });
 }
 
@@ -353,7 +359,13 @@ const tracker = TrackerWS({
   onError: (e) => console.error("err", e),
 });
 
-tracker.subscribe(["e7bce45c-9927-41f7-8af8-2f69f5dfbf2e"]);
+//Subscribes to the UUID
+const entityId = entityIdUrl();
+
+if (entityId) {
+  tracker.subscribe([entityId]);
+}
+
 
 //Websocket connection function
 function TrackerWS({
