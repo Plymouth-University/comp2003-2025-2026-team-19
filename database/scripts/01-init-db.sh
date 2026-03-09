@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-
+echo $API_USER_USERNAME
 # Use psql to execute the SQL with environment variables injected
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
     CREATE USER $API_USER_USERNAME WITH PASSWORD '$API_USER_PASSWORD';
