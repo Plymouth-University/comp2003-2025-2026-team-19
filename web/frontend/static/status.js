@@ -66,6 +66,12 @@ function getFitPadding() {
   return { top: 90, bottom: 80, left: 340, right: 70 };
 }
 
+//Used for obtaining UUID from url
+function entityIdUrl() {
+  const pathUrl = window.location.pathname.split("/");
+  return pathUrl[pathUrl.length - 1];
+}
+
 // --------------------
 // SIDEBAR RENDER
 // --------------------
@@ -183,7 +189,7 @@ function setClock() {
 // --------------------
 function initMap() {
   const startLL = toLngLat(routeCoords[0]);
-  const endLL   = toLngLat(routeCoords[1]);
+  const endLL = toLngLat(routeCoords[1]);
 
   map = new maplibregl.Map({
     container: 'map',
@@ -264,7 +270,7 @@ function initMap() {
     renderSidebar();
 
     // Updates every 10s (same behavior as server)
-    setInterval(updateFerryPosition, 10000);
+    //setInterval(updateFerryPosition, 10000); (Disabled for now)
   });
 }
 
@@ -296,7 +302,7 @@ function updateFerryPosition() {
 
   const current = boatMarker.getLngLat();
   const startLL = toLngLat(routeCoords[0]);
-  const endLL   = toLngLat(routeCoords[1]);
+  const endLL = toLngLat(routeCoords[1]);
 
   const isAtStart =
     Math.abs(current.lng - startLL[0]) < 1e-6 &&
@@ -329,3 +335,159 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(setClock, 1000 * 10);
   initMap();
 });
+
+// Websocket stuff
+
+//Used for initialising the object
+const tracker = TrackerWS({
+  onUpdate: (id, lat, lng, ts) => {
+
+    if (!boatMarker) return;
+
+    boatMarker.setLngLat([lng, lat]);
+    map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 15), duration: 600 });
+
+    const v = vessels.find(v => v.id === id);
+    if (v) {
+      v.eta = "Live Update";
+      v.speed = 8.0;
+    }
+
+    renderSidebar();
+  },
+
+  onStatus: (s) => console.log("status", s),
+  onError: (e) => console.error("err", e),
+});
+
+//Subscribes to the UUID
+const entityId = entityIdUrl();
+
+if (entityId) {
+  tracker.subscribe([entityId]);
+}
+
+
+//Websocket connection function
+function TrackerWS({
+  baseUrl = "",
+  onUpdate,
+  onStatus = () => { },
+  onError = console.error,
+}) {
+  let ws = null;
+  let subscribedIds = [];
+
+  function makeWsUrl(path) {
+    if (!baseUrl) {
+      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      return `${proto}//${window.location.host}${path}`;
+    }
+    const u = new URL(baseUrl);
+    const wsProto = u.protocol === "https:" ? "wss:" : "ws:";
+    return `${wsProto}//${u.host}${path}`;
+  }
+
+  const wsUrl = makeWsUrl("/api/v1/entities/ws");
+
+  //Used for connecting to websocket
+
+  function connect() {
+    ws = new WebSocket(wsUrl);
+    ws.addEventListener("open", () => {
+      onStatus({ type: "connected" });
+
+      if (subscribedIds.length) {
+        subscribe(subscribedIds);
+      }
+    });
+
+    //Listens for any messages
+    ws.addEventListener("message", (event) => {
+      let msg;
+      try {
+        msg = JSON.parse(event.data);
+      } catch (e) {
+        onError({ type: "bad_json", raw: event.data, error: e });
+        return;
+      }
+
+      //Server Check
+      if (msg.status === "subscribed") {
+        onStatus({ type: "subscribed", entity_ids: msg.entity_ids });
+        return;
+      }
+
+      //Location updates
+      if (msg.type === "update" && msg.data) {
+        const { entity_id, latitude, longitude, timestamp } = msg.data;
+
+        if (
+          typeof entity_id === "string" &&
+          typeof latitude === "number" &&
+          typeof longitude === "number"
+        ) {
+          onUpdate(entity_id, latitude, longitude, timestamp);
+        } else {
+          onError({ type: "bad_update_shape", msg });
+        }
+        return;
+      }
+
+      onStatus({ type: "unknown_message", msg });
+    });
+
+    ws.addEventListener("error", (err) => {
+      onError({ type: "ws_error", err });
+    });
+
+    ws.addEventListener("close", () => {
+      onStatus({ type: "disconnected" });
+      ws = null;
+    });
+  }
+
+  //Subscribes to the entity id
+  function subscribe(entityIds) {
+    subscribedIds = Array.from(new Set(entityIds));
+
+    const payload = {
+      action: "subscribe",
+      entity_ids: subscribedIds,
+    };
+
+    console.log("Sending the", payload)
+
+    if (!ws) {
+      connect();
+      return;
+    }
+
+    if (ws.readyState === WebSocket.CONNECTING) {
+      ws.addEventListener(
+        "open",
+        () => ws.send(JSON.stringify(payload)),
+        { once: true }
+      );
+      return
+    }
+
+    if (ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify(payload));
+  }
+
+  //Used for disconnect
+  function disconnect() {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState ===
+      WebSocket.CONNECTING)) {
+      ws.close();
+    }
+    ws = null;
+  }
+  window.addEventListener("pagehide", () => disconnect());
+
+  return { connect, subscribe, disconnect };
+}
+
+
+
