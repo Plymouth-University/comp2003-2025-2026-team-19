@@ -1,13 +1,15 @@
 let map, boatMarker, hoverPopup;
 
+// Fixed route endpoints
 const routeCoords = [
   { lat: 50.36549641988576, lng: -4.164723457671051 }, // Stonehouse
   { lat: 50.36086978940922, lng: -4.174937309091103 }  // Cremyll
 ];
 
+// Ling, lat conversion for MapLibre
 const toLngLat = p => [p.lng, p.lat];
 
-// One vessel for now
+// Current vessel list, more can be added
 const vessels = [
   {
     id: "edgcumbe-belle",
@@ -21,12 +23,14 @@ const vessels = [
   }
 ];
 
+// Sidebar filter/search
 let currentFilter = "all";
 let searchQuery = "";
 
 // --------------------
 // UI HELPERS
 // --------------------
+
 const statusToPill = (s) => {
   if (s === "in_transit") return { label: "In Transit", cls: "green", markerCls: "in-transit" };
   if (s === "docked") return { label: "Docked", cls: "amber", markerCls: "docked" };
@@ -39,7 +43,7 @@ function formatHeading(deg) {
   return `${Math.round(deg)}° (${dirs[idx]})`;
 }
 
-// Bearing from A -> B (degrees)
+// Bearing from A -> B (direction in degrees)
 function bearing(fromLngLat, toLngLat) {
   const toRad = d => d * Math.PI / 180;
   const toDeg = r => r * 180 / Math.PI;
@@ -57,18 +61,18 @@ function bearing(fromLngLat, toLngLat) {
   return brng;
 }
 
-// Responsive fitBounds padding: desktop/tablet vs mobile
+// Sidebar becomes a drawer on mobile
 function getFitPadding() {
   const isMobile = window.innerWidth <= 720;
-  // On mobile, sidebar is a drawer (usually closed), so don't crush the map with left padding.
   if (isMobile) return { top: 90, bottom: 80, left: 16, right: 70 };
-  // On tablet/desktop, leave space for the fixed sidebar.
   return { top: 90, bottom: 80, left: 340, right: 70 };
 }
 
 // --------------------
 // SIDEBAR RENDER
 // --------------------
+
+// Summary counts from the filter tab
 function computeCounts() {
   const all = vessels.length;
   const active = vessels.filter(v => v.status === "in_transit" || v.status === "delayed").length;
@@ -76,6 +80,7 @@ function computeCounts() {
   return { all, active, docked };
 }
 
+// Applies the search/filter to vessel list before rendering the cards
 function applyFilterAndSearch(list) {
   const q = searchQuery.trim().toLowerCase();
   let out = list;
@@ -86,12 +91,14 @@ function applyFilterAndSearch(list) {
     out = out.filter(v => v.status === "docked");
   }
 
+  // Search matches vessel name or route text
   if (q) {
     out = out.filter(v => v.name.toLowerCase().includes(q) || v.route.toLowerCase().includes(q));
   }
   return out;
 }
 
+// Rebuilds the sidebar list and updates the filter counts
 function renderSidebar() {
   const counts = computeCounts();
   document.getElementById("countAll").textContent = counts.all;
@@ -113,6 +120,7 @@ function renderSidebar() {
     const headingTxt = formatHeading(v.heading);
     const etaTxt = v.eta || "—";
 
+    // Render one vessel summary card
     card.innerHTML = `
       <div class="vessel-top">
         <div class="vessel-name">${v.name}</div>
@@ -126,11 +134,13 @@ function renderSidebar() {
       </div>
     `;
 
+    // Clicking the card centers the map on the vessel
     card.addEventListener("click", () => focusVessel(v.id));
     vesselList.appendChild(card);
   });
 }
 
+// Hooks up the sidebar search, filter tabs, and mobile drawer behaviour
 function wireSidebarControls() {
   document.getElementById("searchInput").addEventListener("input", (e) => {
     searchQuery = e.target.value;
@@ -146,11 +156,12 @@ function wireSidebarControls() {
     });
   });
 
-  // Mobile drawer toggle
+  // Mobile drawer elements
   const sidebar = document.getElementById("sidebar");
   const scrim = document.getElementById("scrim");
   const btnSidebar = document.getElementById("btnSidebar");
 
+  // Opens/closes the mobile drawer and background overlay
   const openSidebar = (open) => {
     sidebar.classList.toggle("open", open);
     scrim.classList.toggle("open", open);
@@ -162,7 +173,7 @@ function wireSidebarControls() {
   });
   scrim.addEventListener("click", () => openSidebar(false));
 
-  // Close drawer on resize to desktop + keep map padding sane if you click recenter later
+  // Close mobile drawer on resize to desktop size
   window.addEventListener("resize", () => {
     if (window.innerWidth > 720) openSidebar(false);
   });
@@ -171,6 +182,8 @@ function wireSidebarControls() {
 // --------------------
 // CLOCK
 // --------------------
+
+// Live clock updates in the top bar
 function setClock() {
   const now = new Date();
   const hh = String(now.getHours()).padStart(2, "0");
@@ -179,8 +192,10 @@ function setClock() {
 }
 
 // --------------------
-// MAP INIT (server-working behavior preserved)
+// MAP INIT
 // --------------------
+
+// Map, route line, marker, popup behaviour, and map controls
 function initMap() {
   const startLL = toLngLat(routeCoords[0]);
   const endLL   = toLngLat(routeCoords[1]);
@@ -192,9 +207,11 @@ function initMap() {
     zoom: 14
   });
 
+  // Disable map rotation for simplicity
   map.dragRotate.disable();
   map.touchZoomRotate.disableRotation();
 
+  // Reused popup for hover/tap
   hoverPopup = new maplibregl.Popup({
     closeButton: false,
     closeOnClick: false,
@@ -226,16 +243,17 @@ function initMap() {
       }
     });
 
-    // Fit view to route (now responsive)
+    // Route bounds for the map frame of the full route
     const bounds = new maplibregl.LngLatBounds();
     routeCoords.forEach(p => bounds.extend(toLngLat(p)));
     map.fitBounds(bounds, { padding: getFitPadding() });
 
-    // Boat marker – uses your existing .boat-marker
+    // Boat marker render
     const el = document.createElement('div');
     el.className = 'boat-marker in-transit';
     el.setAttribute("aria-label", "Vessel position");
 
+    // Add the boat marker to the route start
     boatMarker = new maplibregl.Marker({ element: el })
       .setLngLat(startLL)
       .addTo(map);
@@ -244,7 +262,6 @@ function initMap() {
     el.addEventListener("mouseenter", () => showBoatPopup());
     el.addEventListener("mouseleave", () => hoverPopup.remove());
     el.addEventListener("click", (e) => {
-      // On touch devices click is the "hover"
       showBoatPopup();
       focusVessel("edgcumbe-belle");
       e.stopPropagation();
@@ -260,14 +277,15 @@ function initMap() {
       map.fitBounds(bounds, { padding: getFitPadding() });
     });
 
-    // Initial UI render
+    // Initial sidebar render
     renderSidebar();
 
-    // Updates every 10s (same behavior as server)
+    // Updates boat marker every 10s
     setInterval(updateFerryPosition, 10000);
   });
 }
 
+// Builds the small marker popup
 function showBoatPopup() {
   const v = vessels[0];
   if (!boatMarker) return;
@@ -281,7 +299,7 @@ function showBoatPopup() {
   hoverPopup.setLngLat([ll.lng, ll.lat]).setHTML(html).addTo(map);
 }
 
-// Focus from sidebar/marker
+// Centers the map on the selected vessel
 function focusVessel(id) {
   if (!map || !boatMarker) return;
   const ll = boatMarker.getLngLat();
@@ -289,8 +307,10 @@ function focusVessel(id) {
 }
 
 // --------------------
-// POSITION UPDATE (server logic + your enhancements)
+// POSITION UPDATE
 // --------------------
+
+// Boat marker current position
 function updateFerryPosition() {
   if (!boatMarker) return;
 
@@ -298,6 +318,7 @@ function updateFerryPosition() {
   const startLL = toLngLat(routeCoords[0]);
   const endLL   = toLngLat(routeCoords[1]);
 
+  // Start point check
   const isAtStart =
     Math.abs(current.lng - startLL[0]) < 1e-6 &&
     Math.abs(current.lat - startLL[1]) < 1e-6;
@@ -305,13 +326,13 @@ function updateFerryPosition() {
   const next = isAtStart ? endLL : startLL;
   boatMarker.setLngLat(next);
 
-  // Update vessel stats used by sidebar + popup
+  // Update vessel details used by sidebar + popup
   const v = vessels[0];
   v.heading = bearing([current.lng, current.lat], next);
   v.eta = "≈ 8 min";
   v.speed = 8.0;
 
-  // Update top status text
+  // Update top status (time + text)
   const status = document.getElementById('statusText');
   const time = new Date().toLocaleTimeString();
   const locationName = isAtStart ? 'Cremyll' : 'Stonehouse';
@@ -323,9 +344,11 @@ function updateFerryPosition() {
 // --------------------
 // BOOT
 // --------------------
+
+// DOM check before building the map
 document.addEventListener('DOMContentLoaded', () => {
   wireSidebarControls();
   setClock();
-  setInterval(setClock, 1000 * 10);
+  setInterval(setClock, 1000 * 10); // Refresh the clock every 10 seconds
   initMap();
 });
