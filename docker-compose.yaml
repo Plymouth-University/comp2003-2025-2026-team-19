@@ -21,8 +21,8 @@ services:
   redis:
     image: redis:8.6-alpine
     restart: always
-    ports:
-      - "6379:6379"
+    # ports:
+    #   - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -106,7 +106,6 @@ services:
     restart: always
     ports:
       - "20003:80"
-      - "443:443"
     depends_on:
       api:
         condition: service_healthy
