@@ -3,11 +3,21 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin Page</title>
-  <meta name="description" content="Live tracking for the Stonehouse to Cremyll Mount Edgcumbe Ferry." />
-
-  <link rel="stylesheet" href="/frontend/admin_page.css" />
+  <title>Admin Ferry Status Checker</title>
+  <meta name="description" content="Allows Admin to check status of ferries" />
+  <link rel="stylesheet" href="/static/admin_page.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <h1>hello</h1>
+<div class="background_image">
+<div class="info_box">
+<p class="nice_text">Ferry Tracker Status</p>
+<ul id="entity_list_container"></ul>
+  </div>
+</div>
+
+<script src="/static/admin_page.js"></script>
 </body>
+</html>

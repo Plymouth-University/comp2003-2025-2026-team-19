@@ -1,25 +1,89 @@
-:root {
-  --bg: #0b1020;
-  --fg: #e6ebff;
-  --muted: #9aa3b2;
-  --accent: #5aa7ff;
-  --panel: rgba(0, 30, 100, 0.82);
-  --panel2: rgba(0, 30, 100, 0.82);
-  --stroke: rgba(255,255,255,.08);
-  --handle: #ffffff;
-  --shadow: 0 12px 32px rgba(0,0,0,.45);
-
-  --green:#22c55e;
-  --amber:#f59e0b;
-  --red:#ef4444;
+.background_image {
+display: flex;
+justify-content: center;
+align-items: center;
+background-image: url("/static/design/Tamar_Bridge2.jpg");
+background-size: 100% 100%;
+background-repeat: no-repeat;
+min-height: 100vh;
 }
 
-* { box-sizing: border-box; }
+.info_box {
+    background: (rgb(255, 255, 255), 0.9);
+    border-radius: 20px;
+    box-shadow: 0 10px, 30px, rgb(0, 0, 0, 0.2);
+    border: 1px solid black;
+    backdrop-filter: blur(20px);
+    padding: 5px 5px 5px 5px;
+}
+
 html, body {
-  height: 100%;
-  margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, Noto Sans;
+    height: 100%;
+    margin: 0;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    color: whitesmoke;
 }
 
+.nice_text {
+    font-family: "Josefin Sans", sans-serif;
+    font-weight: 600;
+    font-optical-sizing: auto;
+    font-size: 22px;
+    font-style: normal;
+    letter-spacing: 0.3px;
+}
+
+#entity_list_container {
+    padding: 0;
+    margin: 0;
+}
+
+#entity_list_container li {
+    padding: 10px;
+    background: rgba(2, 141, 255, 0.475);
+    opacity: 75%;
+    margin: 5px 0;
+    list-style: none;
+    cursor: pointer;
+    display: inline-block;
+    border-radius: 999px;
+    border: 1px solid black;
+}
+
+#entity_list_container li:hover {
+    background: rgba(0, 78, 142, 0.475);
+}
+
+#entity_list_container li a {
+    color: white;
+    text-decoration: none;
+    white-space: normal;
+}
+
+.status_row {
+  margin-top: 6px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status_circle {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block
+}
+
+.status-green {
+  background: #2ecc71;
+}
+
+.status-red {
+  background: #e74c3c;
+}
+.timestamp {
+  margin-left: 10px;
+  font-size: 12px;
+  opacity: 0.8;
+}
