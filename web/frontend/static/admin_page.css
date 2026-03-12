@@ -1,11 +1,67 @@
-.background_image {
-display: flex;
-justify-content: center;
-align-items: center;
-background-image: url("/static/design/Tamar_Bridge2.jpg");
-background-size: 100% 100%;
-background-repeat: no-repeat;
-min-height: 100vh;
+:root {
+  --bg: #0b1020;
+  --fg: #e6ebff;
+  --muted: #9aa3b2;
+  --accent: #5aa7ff;
+  --panel: rgba(0, 30, 100, 0.82);
+  --panel2: rgba(0, 30, 100, 0.82);
+  --stroke: rgba(255,255,255,.08);
+  --handle: #ffffff;
+  --shadow: 0 12px 32px rgba(0,0,0,.45);
+
+  --green:#22c55e;
+  --amber:#f59e0b;
+  --red:#ef4444;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.admin_layout{
+  display: flex;
+  height:100vh;
+}
+
+.sidebar{
+  width:220px;
+  background: var(--panel);
+  padding:50px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  border-right:1px solid var(--stroke);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
+}
+
+.sidebar button{
+  background: #e6ebff;
+  padding: 25px;
+  border-radius:10px;
+  border:1px solid var(--stroke);
+  color: #9397a7;
+  cursor: pointer;
+  font-size: 20px;
+}
+
+.sidebar button:hover{
+  background: rgba(255,255,255,0.8)
+}
+
+main{
+  flex:1;
+  overflow: auto;
+}
+
+.tab_page{
+  display: none;
+  padding: 20px;
+}
+
+.tab_page.active{
+  display:block;
 }
 
 .info_box {

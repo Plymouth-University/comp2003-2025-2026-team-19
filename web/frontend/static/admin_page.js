@@ -1,3 +1,12 @@
+//Keep at top
+function openTab(tabName){
+  document.querySelectorAll(".tab_page").forEach(tab=>{
+    tab.classList.remove("active")
+  })
+
+  document.getElementById(tabName + "_tab").classList.add("active")
+}
+
 const entity_list = [
   {
     "id": "b85e5637-4791-4aa4-abec-a2ac3e4a946e",
@@ -63,7 +72,7 @@ function updateEntityList(entity_list) {
       li.innerHTML = `
       <a href="/status/${entity.id}">
       ${entity.name}
-      <div class="status_row">
+      <div class="status_row"><a>
         Status:
         <span class="status_circle ${statusClass}"></span>
         <span class="timestamp">Last updated: ${entity.last_updated}</span>
@@ -71,6 +80,7 @@ function updateEntityList(entity_list) {
       </a>
     `;
     } else {
+        //Not really needed anymore but keeping in case we *do* want to show routes on the ferry tra
         li.innerHTML = `
         <a href="/status/${entity.id}">
            ${entity.name}:<br>
@@ -92,5 +102,8 @@ function updateEntityList(entity_list) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    
+    openTab("dashboard")
+
     updateEntityList(entity_list);
 });

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin Ferry Status Checker</title>
+  <title>Admin Page</title>
   <meta name="description" content="Allows Admin to check status of ferries" />
   <link rel="stylesheet" href="/static/admin_page.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,13 +11,50 @@
   <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
 </head>
 <body>
-<div class="background_image">
-<div class="info_box">
-<p class="nice_text">Ferry Tracker Status</p>
-<ul id="entity_list_container"></ul>
-  </div>
+
+<!--Holds the sidebar and contents-->
+<div class="admin_layout">
+
+  <aside class="sidebar">
+    <p class="nice_text">Admin Panel</p>
+
+    <button onclick="openTab('dashboard')">Dashboard</button>
+    <button onclick="openTab('trackers')">Trackers</button>
+    <button onclick="openTab('users')">Users</button>
+    <button onclick="openTab('security')">Security</button>
+    <button onclick="openTab('settings')">Settings</button>
+  </aside>
+
+  <main id="content_area">
+  
+    <div id="dashboard_tab" class="tab_page">
+      <h1>Welcome</h1>
+      <h2>Table of activity</h2>
+    </div>
+
+    <div id="trackers_tab" class="tab_page">
+
+      <div class="info_box">
+        <p class="nice_text">Ferry Tracker Status</p>
+        <ul id="entity_list_container"></ul>
+      </div>
+    </div>
+
+    <div id="users_tab" class="tab_page">
+      <h1>Users</h1>
+    </div>
+
+    <div id="security_tab" class="tab_page">
+      <h1>Security</h1>
+    </div>
+
+    <div id="settings_tab" class="tab_page">
+      <h1>Settings</h1>
+    </div>
+  </main>
 </div>
 
 <script src="/static/admin_page.js"></script>
+
 </body>
 </html>
