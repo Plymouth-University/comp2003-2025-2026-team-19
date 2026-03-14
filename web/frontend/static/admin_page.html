@@ -12,48 +12,46 @@
 </head>
 <body>
 
-<!--Holds the sidebar and contents-->
-<div class="admin_layout">
+<header class="top_bar">
+  <h1 class="nice_text">Admin Panel</h1>
+  <button class="settings_button" onclick="openSettings()">
+    Settings
+  </button>
+</header>
 
-  <aside class="sidebar">
-    <p class="nice_text">Admin Panel</p>
-
-    <button onclick="openTab('dashboard')">Dashboard</button>
-    <button onclick="openTab('trackers')">Trackers</button>
-    <button onclick="openTab('users')">Users</button>
-    <button onclick="openTab('security')">Security</button>
-    <button onclick="openTab('settings')">Settings</button>
-  </aside>
-
-  <main id="content_area">
+<!--Html for main grid layout-->
+<main>
+  <div class="dashboard">
+     
+    <div class="panel graph_panel">
+      <p class="nice_text">Activity Graph</p>
+    </div>
   
-    <div id="dashboard_tab" class="tab_page">
-      <h1>Welcome</h1>
-      <h2>Table of activity</h2>
+    <div class="panel stats_panel">
+      <p class="nice_text">Site Statistics</p>
     </div>
 
-    <div id="trackers_tab" class="tab_page">
-
-      <div class="info_box">
-        <p class="nice_text">Ferry Tracker Status</p>
+    <div class="panel trackers_panel">
+      <p class="nice_text">Trackers</p>
+      <div class="trackers_scroll">
         <ul id="entity_list_container"></ul>
       </div>
     </div>
 
-    <div id="users_tab" class="tab_page">
-      <h1>Users</h1>
-    </div>
-
-    <div id="security_tab" class="tab_page">
-      <h1>Security</h1>
-    </div>
-
-    <div id="settings_tab" class="tab_page">
-      <h1>Settings</h1>
-    </div>
-  </main>
+   <div class=" panel security_panel">
+      <p class="nice_text">Security Notifications</p>
+   </div>
 </div>
 
+<!--Settings button-->
+<div id="settings_panel" class="settings_panel">
+  <div class="settings_content">
+    <h1>Settings</h1>
+    <button onclick="closeSettings()">Close</button>
+  </div>
+</div>
+
+<!--Javascript-->
 <script src="/static/admin_page.js"></script>
 
 </body>
