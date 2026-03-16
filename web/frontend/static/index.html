@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>All Active Trackers</title>
+  <meta name="description" content="Live tracking for the Stonehouse to Cremyll Mount Edgcumbe Ferry." />
+
+  <!-- MapLibre CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.5.0/dist/maplibre-gl.css" />
+
+  <link rel="stylesheet" href="/static/status.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="map" role="application" aria-label="Ferry route map"></div>
+
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">⛴️</div>
+        <div>
+          <div class="brand-title">All Trackers</div>
+          <div class="brand-sub">Real-time vessel monitoring</div>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <!-- Mobile: open/close vessel drawer -->
+        <button class="icon-btn mobile-only" id="btnSidebar" aria-label="Open vessel list" title="Vessels">☰</button>
+
+        <div class="chip-inline tablet-up">
+          <span class="dot dot-blue"></span>
+          <span>Plymouth Sound</span>
+        </div>
+
+        <div class="chip-inline">
+          <span aria-hidden="true">🕒</span>
+          <span id="clockText">--:--</span>
+        </div>
+
+        <div id="statusText" class="status-text">Status: —</div>
+      </div>
+    </header>
+
+    <!-- Mobile scrim when drawer open -->
+    <div id="scrim" class="scrim" aria-hidden="true"></div>
+
+    <!-- Left sidebar / Drawer -->
+    <aside id="sidebar" class="sidebar" aria-label="Vessel list">
+      <div class="sidebar-top">
+        <div class="search">
+          <span class="search-ic" aria-hidden="true">🔎</span>
+          <input id="searchInput" type="search" placeholder="Search vessels..." autocomplete="off" />
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="Vessel filters">
+          <button class="tab active" data-filter="all" role="tab">
+            All (<span id="countAll">0</span>)
+          </button>
+          <button class="tab" data-filter="active" role="tab">
+            Active (<span id="countActive">0</span>)
+          </button>
+          <button class="tab" data-filter="docked" role="tab">
+            Docked (<span id="countDocked">0</span>)
+          </button>
+        </div>
+      </div>
+
+      <div id="vesselList" class="vessel-list" aria-label="Vessels"></div>
+    </aside>
+
+    <!-- Bottom-left legend -->
+    <div class="legend" aria-label="Vessel status legend">
+      <div class="legend-title">Vessel Status</div>
+      <div class="legend-row"><span class="dot dot-green"></span><span>In Transit</span></div>
+      <div class="legend-row"><span class="dot dot-amber"></span><span>Docked</span></div>
+      <div class="legend-row"><span class="dot dot-red"></span><span>Delayed</span></div>
+    </div>
+
+    <!-- Right controls -->
+    <div class="map-controls" aria-label="Map controls">
+      <button class="ctrl-btn" id="btnZoomIn" title="Zoom in" aria-label="Zoom in">＋</button>
+      <button class="ctrl-btn" id="btnZoomOut" title="Zoom out" aria-label="Zoom out">－</button>
+      <button class="ctrl-btn" id="btnRecenter" title="Recenter" aria-label="Recenter">◎</button>
+    </div>
+  </div>
+
+  <!-- MapLibre JS -->
+  <script src="https://unpkg.com/maplibre-gl@3.5.0/dist/maplibre-gl.js"></script>
+
+  <script src="/static/status.js"></script>
+
+</body>
+</html>

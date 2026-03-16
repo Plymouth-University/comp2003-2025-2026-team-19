@@ -1,4 +1,5 @@
 import fastapi
+from fastapi import Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -16,15 +17,12 @@ app.mount("/static", static, name="static")
 
 
 @app.get("/")
-async def get_root():
+async def get_root(request: Request):
     """Returns a welcome message or the index page.
     Returns:
         dict: A welcome message.
     """
-    return {"message": "Welcome to the ferrytracker Web Backend!"}
-
-    # TODO: Return index.html template
-    # return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
 @app.get("/status/{entity_id}")
