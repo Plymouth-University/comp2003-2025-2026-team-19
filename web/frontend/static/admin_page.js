@@ -103,4 +103,40 @@ function openSettings() {
 
 function closeSettings() {
   document.getElementById("settings_panel").style.display = "none";
-} 
+}
+
+//Fetches wanted data
+async function loadSentryMetrics() {
+  const res = await fetch("/api/sentry/metrics");
+  const data = await res.json();
+
+  console.log(data);
+
+  renderMetrics(data);
+}
+
+//Renders data
+function renderMetrics(data) {
+  const statsPanel = document.querySelector(".stats_panel");
+
+  if (!data || !data.data || data.data.length === 0) {
+    statsPanel.innerHTML += "<p>No presentable data</p>";
+    return;
+  }
+
+  const latest = data.data[data.data.length - 1];
+
+  statsPanel.innerHTML += `
+    <div>
+      <p>Requests: ${latest.count || 0}</p>
+      <p>Issues: ${latest.count|| 0}</p>
+      <p>Average Latency: ${latest["avg(span.duration)"] || 0} ms</p>
+      <p>P95 Latency: ${latest["p95(span.duration)"] || 0} ms</p>
+    `;
+}
+
+//For getting logs from Sentry
+document.addEventListener("DOMContentLoaded", () => {
+  Sentry.captureMessage("Admin page loaded");
+  loadSentryMetrics();
+});
