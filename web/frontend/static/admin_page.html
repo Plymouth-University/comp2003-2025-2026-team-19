@@ -51,12 +51,11 @@
   </div>
 </div>
 
-
 <!--Sentry Input-->
 <script src="https://browser.sentry-cdn.com/7.120.0/bundle.min.js"></script>
 <script>
   Sentry.init({
-    dsn: "https://fae1475cea4b27772abf20fd77f3ec78@o4510404857757696.ingest.de.sentry.io/4510404863721552",
+    dsn: "{{SENTRY_DSN}}",
     tracesSampleRate: 1.0,
   });
 </script>

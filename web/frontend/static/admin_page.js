@@ -107,7 +107,7 @@ function closeSettings() {
 
 //Fetches wanted data
 async function loadSentryMetrics() {
-  const res = await fetch("/api/sentry/metrics");
+  const res = await fetch("/api/v1/sentry/metrics");
   const data = await res.json();
 
   console.log(data);
@@ -128,8 +128,7 @@ function renderMetrics(data) {
 
   statsPanel.innerHTML += `
     <div>
-      <p>Requests: ${latest.count || 0}</p>
-      <p>Issues: ${latest.count|| 0}</p>
+      <p>Requests: ${latest["count()"] || 0}</p>
       <p>Average Latency: ${latest["avg(span.duration)"] || 0} ms</p>
       <p>P95 Latency: ${latest["p95(span.duration)"] || 0} ms</p>
     `;

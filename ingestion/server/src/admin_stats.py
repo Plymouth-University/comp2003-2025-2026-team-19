@@ -1,12 +1,13 @@
 import requests
 from fastapi import FastAPI
+from core.settings import settings
 
 app = FastAPI()
 
-SENTRY_TOKEN = "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"
-ORG_SLUG = "isaac-taylor"
+SENTRY_TOKEN = settings.SENTRY_TOKEN
+ORG_SLUG = settings.SENTRY_ORG
 
-@app.get("/api/sentry/metrics")
+@app.get("/sentry/metrics")
 def get_sentry_metrics():
     url = f"https://sentry.io/api/0/organizations/{ORG_SLUG}/events/"
 
@@ -18,7 +19,7 @@ def get_sentry_metrics():
     }
 
     headers = {
-        "Authorizatio": f"Bearer {SENTRY_TOKEN}"
+        "Authorization": f"Bearer {SENTRY_TOKEN}"
     }
 
     response = requests.get(url, headers=headers, params=params)

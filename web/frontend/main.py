@@ -1,6 +1,7 @@
 import fastapi
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from core.settings import settings
 
 templates = Jinja2Templates(directory="static/")
 static = StaticFiles(directory="static/")
@@ -51,7 +52,7 @@ async def get_status(
 ) -> fastapi.responses.HTMLResponse:
 
     return templates.TemplateResponse(
-        "admin_page.html", {"request": request, "entity_id": entity_id}
+        "admin_page.html", {"request": request, "entity_id": entity_id, "SENTRY_TOKEN": settings.SENTRY_TOKEN}
     )
 
 
