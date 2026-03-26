@@ -28,7 +28,19 @@
     </div>
   
     <div class="panel stats_panel">
-      <p class="nice_text">Site Statistics</p>
+      <p class="nice_text">Server Statistics</p>
+        <div class="stat">
+          <span class="stat_label">Total Requests: </span>
+          <span id="stat-total">-</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Average Latency: </span>
+          <span id="stat-avg-latency">-</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Status Codes: </span>
+          <span id="stat-statuses">-</span>
+        </div>
     </div>
 
     <div class="panel trackers_panel">
@@ -50,15 +62,6 @@
     <button onclick="closeSettings()">Close</button>
   </div>
 </div>
-
-<!--Sentry Input-->
-<script src="https://browser.sentry-cdn.com/7.120.0/bundle.min.js"></script>
-<script>
-  Sentry.init({
-    dsn: "{{SENTRY_DSN}}",
-    tracesSampleRate: 1.0,
-  });
-</script>
 
 <!--Javascript-->
 <script src="/static/admin_page.js"></script>

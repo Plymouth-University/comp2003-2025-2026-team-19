@@ -22,10 +22,6 @@ class Settings(BaseSettings):
 
     REDIS_HOST: str = "redis"
 
-    SENTRY_TOKEN: str
-
-    SENTRY_ORG: str
-
     @computed_field
     @property
     def API_DATABASE_URL(self) -> str:

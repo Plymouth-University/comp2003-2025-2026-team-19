@@ -105,37 +105,41 @@ function closeSettings() {
   document.getElementById("settings_panel").style.display = "none";
 }
 
-//Fetches wanted data
-async function loadSentryMetrics() {
-  const res = await fetch("/api/v1/sentry/metrics");
-  const data = await res.json();
+//Used for getting the metrics data to be displayed on the admin page
+let metricsData = [];
 
-  console.log(data);
+function renderStats(data) {
+  if (data.length === 0) return;
 
-  renderMetrics(data);
-}
+  const totalRequests = data.length;
+  const avgLatency = (data.reduce((sum, row) => sum + row.latency_ms, 0)
+  / totalRequests).toFixed(2);
+    const statusCounts = data.reduce((acc, row) => {
+      acc[row.status] = (acc[row.status] || 0) + 1;
+      return acc;
+    }, {});
 
-//Renders data
-function renderMetrics(data) {
-  const statsPanel = document.querySelector(".stats_panel");
-
-  if (!data || !data.data || data.data.length === 0) {
-    statsPanel.innerHTML += "<p>No presentable data</p>";
-    return;
+    document.getElementById("stat-total").textContent = totalRequests;
+    document.getElementById("stat-avg-latency").textContent = `${avgLatency}ms`;
+    document.getElementById("stat-statuses").innerHTML =
+  Object.entries(statusCounts)
+          .map(([status, count]) => `<span>${status}: ${count}</span>`)
+          .join(" | ");
   }
 
-  const latest = data.data[data.data.length - 1];
+  async function fetchMetrics() {
+    try {
+      const res = await fetch("/metrics");
+      if (!res.ok) {
+        console.warn("Metrics endpoint returned", res.status);
+        return;
+      }
+      metricsData = await res.json();
+      renderStats(metricsData);
+    } catch (err) {
+      console.error("Failed to fetch the metrics data", err);
+    }
+  }
 
-  statsPanel.innerHTML += `
-    <div>
-      <p>Requests: ${latest["count()"] || 0}</p>
-      <p>Average Latency: ${latest["avg(span.duration)"] || 0} ms</p>
-      <p>P95 Latency: ${latest["p95(span.duration)"] || 0} ms</p>
-    `;
-}
-
-//For getting logs from Sentry
-document.addEventListener("DOMContentLoaded", () => {
-  Sentry.captureMessage("Admin page loaded");
-  loadSentryMetrics();
-});
+setInterval(fetchMetrics, 3000);
+fetchMetrics();

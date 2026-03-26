@@ -1,4 +1,6 @@
 import fastapi
+from fastapi import Request
+import time
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from core.settings import settings
@@ -15,6 +17,27 @@ serving html pages and static assets.",
 
 app.mount("/static", static, name="static")
 
+#Used for retrieving metric data as the server runs i.e. current request
+#average latency, status codes, etc
+
+metrics = []
+
+@app.middleware("http")
+async def record_metrics(request: Request, call_next):
+    start = time.time()
+    response = await call_next(request)
+    if request.method == "GET":
+        metrics.append ({
+            "path": request.url.path,
+            "status": response.status_code,
+            "latency_ms": round((time.time() - start ) * 1000, 2),
+            "timestamp": time.strftime("%H:%M:%S")
+        })
+    return response
+
+@app.get("/metrics")
+async def get_metrics():
+    return metrics [-50:]
 
 @app.get("/")
 async def get_root():
@@ -47,12 +70,12 @@ async def get_status(
     )
 
 @app.get("/admin/{entity_id}")
-async def get_status(
+async def get_admin(
     request: fastapi.Request, entity_id: str
 ) -> fastapi.responses.HTMLResponse:
 
     return templates.TemplateResponse(
-        "admin_page.html", {"request": request, "entity_id": entity_id, "SENTRY_TOKEN": settings.SENTRY_TOKEN}
+        "admin_page.html", {"request": request, "entity_id": entity_id, "SENTRY_DSN": settings.SENTRY_DSN}
     )
 
 
