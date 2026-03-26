@@ -1,516 +1,351 @@
-let map, boatMarker, hoverPopup;
+// --------------------
+// CONFIG & STATE
+// --------------------
 
-// Fixed route endpoints
+let map, hoverPopup;
+const vessels = {}; // Collection of vessel objects keyed by ID
+
+// Default route for visual reference
 const routeCoords = [
   { lat: 50.36549641988576, lng: -4.164723457671051 }, // Stonehouse
   { lat: 50.36086978940922, lng: -4.174937309091103 }  // Cremyll
 ];
 
-// Ling, lat conversion for MapLibre
 const toLngLat = p => [p.lng, p.lat];
-
-// Current vessel list, more can be added
-const vessels = [
-  {
-    id: "edgcumbe-belle",
-    name: "EDGCUMBE BELLE",
-    route: "Stonehouse ↔ Cremyll",
-    status: "in_transit",  // in_transit | docked | delayed
-    speed: 8.0,
-    eta: "—",
-    heading: 0,
-    getLngLat: () => boatMarker?.getLngLat()
-  }
-];
-
-// Sidebar filter/search
-let currentFilter = "all";
-let searchQuery = "";
 
 // --------------------
 // UI HELPERS
 // --------------------
 
-const statusToPill = (s) => {
-  if (s === "in_transit") return { label: "In Transit", cls: "green", markerCls: "in-transit" };
-  if (s === "docked") return { label: "Docked", cls: "amber", markerCls: "docked" };
-  return { label: "Delayed", cls: "red", markerCls: "delayed" };
+const getStatusTheme = (status) => {
+  const themes = {
+    in_transit: { label: "In Transit", cls: "green" },
+    docked: { label: "Docked", cls: "amber" },
+    delayed: { label: "Delayed", cls: "red" }
+  };
+  return themes[status] || themes.in_transit;
 };
 
 function formatHeading(deg) {
   const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-  const idx = Math.round(((deg % 360) / 45)) % 8;
+  const idx = Math.round((deg % 360) / 45) % 8;
   return `${Math.round(deg)}° (${dirs[idx]})`;
 }
 
-// Bearing from A -> B (direction in degrees)
-function bearing(fromLngLat, toLngLat) {
-  const toRad = d => d * Math.PI / 180;
-  const toDeg = r => r * 180 / Math.PI;
-
-  const lon1 = toRad(fromLngLat[0]);
-  const lat1 = toRad(fromLngLat[1]);
-  const lon2 = toRad(toLngLat[0]);
-  const lat2 = toRad(toLngLat[1]);
-
+function calculateBearing(start, end) {
+  const toRad = d => (d * Math.PI) / 180;
+  const toDeg = r => (r * 180) / Math.PI;
+  const lon1 = toRad(start[0]), lat1 = toRad(start[1]);
+  const lon2 = toRad(end[0]), lat2 = toRad(end[1]);
   const dLon = lon2 - lon1;
   const y = Math.sin(dLon) * Math.cos(lat2);
   const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-  let brng = toDeg(Math.atan2(y, x));
-  brng = (brng + 360) % 360;
-  return brng;
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
 
-// Sidebar becomes a drawer on mobile
 function getFitPadding() {
   const isMobile = window.innerWidth <= 720;
-  if (isMobile) return { top: 90, bottom: 80, left: 16, right: 70 };
-  return { top: 90, bottom: 80, left: 340, right: 70 };
+  return isMobile 
+    ? { top: 120, bottom: 40, left: 40, right: 40 } 
+    : { top: 120, bottom: 100, left: 380, right: 60 };
 }
 
-//Used for obtaining UUID from url
-function entityIdUrl() {
-  const pathUrl = window.location.pathname.split("/");
-  return pathUrl[pathUrl.length - 1];
+function fitAllVessels() {
+  if (!map) return;
+
+  const bounds = new maplibregl.LngLatBounds();
+
+  // 1. Include the static route coordinates
+  routeCoords.forEach(p => bounds.extend([p.lng, p.lat]));
+
+  // 2. Include all active vessel positions
+  const activeVessels = Object.values(vessels);
+  activeVessels.forEach(v => {
+    bounds.extend([v.lng, v.lat]);
+  });
+
+  // 3. Fit the map to these bounds
+  // Padding helps keep markers away from the UI overlays (sidebar/header)
+  map.fitBounds(bounds, {
+    padding: getFitPadding(),
+    maxZoom: 16, // Prevents zooming in too far if there's only one point
+    duration: 1000 // Smooth animation
+  });
 }
 
 // --------------------
-// SIDEBAR RENDER
+// CORE LOGIC: DATA SYNC
 // --------------------
 
-// Summary counts from the filter tab
-function computeCounts() {
-  const all = vessels.length;
-  const active = vessels.filter(v => v.status === "in_transit" || v.status === "delayed").length;
-  const docked = vessels.filter(v => v.status === "docked").length;
-  return { all, active, docked };
-}
+/**
+ * Updates or creates a vessel and syncs it to the Map and Sidebar
+ */
+let hasInitialFit = false;
 
-// Applies the search/filter to vessel list before rendering the cards
-function applyFilterAndSearch(list) {
-  const q = searchQuery.trim().toLowerCase();
-  let out = list;
-
-  if (currentFilter === "active") {
-    out = out.filter(v => v.status === "in_transit" || v.status === "delayed");
-  } else if (currentFilter === "docked") {
-    out = out.filter(v => v.status === "docked");
+function syncVesselData(id, lat, lng, extra = {}) {
+  // 1. Initialize vessel if new
+  if (!vessels[id]) {
+    vessels[id] = {
+      id: id,
+      name: extra.name || id.replace(/-/g, ' ').toUpperCase(),
+      route: extra.route.uuid ? `${extra.route.origin} ↔ ${extra.route.destination}` : "No Route",
+      status: extra.status || "in_transit",
+      speed: 0,
+      heading: 0,
+      lat: lat,
+      lng: lng,
+      marker: null,
+      lastUpdated: null
+    };
   }
 
-  // Search matches vessel name or route text
-  if (q) {
-    out = out.filter(v => v.name.toLowerCase().includes(q) || v.route.toLowerCase().includes(q));
+  const v = vessels[id];
+
+  // 2. Update movement logic
+  if (v.lat !== lat || v.lng !== lng) {
+    v.heading = calculateBearing([v.lng, v.lat], [lng, lat]);
   }
-  return out;
+
+  v.lat = lat;
+  v.lng = lng;
+  v.speed = extra.speed || 8.0;
+  v.lastUpdated = new Date().toLocaleTimeString();
+
+  const now = new Date();
+  const timestamp = now.toLocaleTimeString([], { 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    second: '2-digit' 
+  });
+  v.lastUpdated = timestamp;
+
+  // 3. Update the Top Bar Status Text
+  const statusEl = document.getElementById("statusText");
+  if (statusEl) {
+    statusEl.innerHTML = `Status: <span style="color: var(--green)">Live</span> • Last update: ${timestamp}`;
+  }
+
+  // 3. Sync with Map (if map is ready)
+  if (map) {
+    if (!v.marker) {
+      v.marker = createVesselMarker(v);
+    }
+    v.marker.setLngLat([lng, lat]);
+    if (!hasInitialFit) {
+      fitAllVessels();
+      hasInitialFit = true;
+    }
+  }
+
+  // 4. Update UI
+  renderSidebar();
 }
 
-// Rebuilds the sidebar list and updates the filter counts
+/**
+ * Create a physical marker on the map for a specific vessel
+ */
+function createVesselMarker(v) {
+  const el = document.createElement('div');
+  el.className = `boat-marker ${v.status}`;
+
+  const marker = new maplibregl.Marker({ element: el })
+    .setLngLat([v.lng, v.lat])
+    .addTo(map);
+
+  el.addEventListener("mouseenter", () => showBoatPopup(v));
+  el.addEventListener("mouseleave", () => hoverPopup.remove());
+  el.addEventListener("click", (e) => {
+    e.stopPropagation();
+    focusVessel(v.id);
+  });
+
+  return marker;
+}
+
+// --------------------
+// UI RENDERING
+// --------------------
+
 function renderSidebar() {
-  const counts = computeCounts();
-  document.getElementById("countAll").textContent = counts.all;
-  document.getElementById("countActive").textContent = counts.active;
-  document.getElementById("countDocked").textContent = counts.docked;
-
   const vesselList = document.getElementById("vesselList");
+  if (!vesselList) return;
+
   vesselList.innerHTML = "";
 
-  const shown = applyFilterAndSearch(vessels);
-
-  shown.forEach(v => {
-    const st = statusToPill(v.status);
-
+  Object.values(vessels).forEach(v => {
+    const theme = getStatusTheme(v.status);
     const card = document.createElement("div");
     card.className = "vessel-card";
-    card.dataset.id = v.id;
-
-    const headingTxt = formatHeading(v.heading);
-    const etaTxt = v.eta || "—";
-
-    // Render one vessel summary card
     card.innerHTML = `
       <div class="vessel-top">
         <div class="vessel-name">${v.name}</div>
-        <div class="pill ${st.cls}">${st.label}</div>
+        <div class="pill ${theme.cls}">${theme.label}</div>
       </div>
       <div class="vessel-sub">${v.route}</div>
       <div class="vessel-meta">
         <div>${v.speed.toFixed(1)} kts</div>
-        <div>${headingTxt}</div>
-        <div style="color: var(--muted)">ETA ${etaTxt}</div>
+        <div>${formatHeading(v.heading)}</div>
+        <div style="color: var(--muted)">Updated ${v.lastUpdated}</div>
       </div>
     `;
-
-    // Clicking the card centers the map on the vessel
     card.addEventListener("click", () => focusVessel(v.id));
     vesselList.appendChild(card);
   });
 }
 
-// Hooks up the sidebar search, filter tabs, and mobile drawer behaviour
-function wireSidebarControls() {
-  document.getElementById("searchInput").addEventListener("input", (e) => {
-    searchQuery = e.target.value;
-    renderSidebar();
-  });
+function showBoatPopup(v) {
+  const html = `
+    <div class="popup-title">${v.name}</div>
+    <div class="popup-row"><span class="popup-muted">Speed</span> <span>${v.speed.toFixed(1)} kts</span></div>
+    <div class="popup-row"><span class="popup-muted">Dir</span> <span>${formatHeading(v.heading)}</span></div>
+  `;
+  hoverPopup.setLngLat([v.lng, v.lat]).setHTML(html).addTo(map);
+}
 
-  document.querySelectorAll(".tab").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      currentFilter = btn.dataset.filter;
-      renderSidebar();
-    });
-  });
+function focusVessel(id) {
+  const v = vessels[id];
+  if (!map || !v) return;
 
-  // Mobile drawer elements
-  const sidebar = document.getElementById("sidebar");
-  const scrim = document.getElementById("scrim");
-  const btnSidebar = document.getElementById("btnSidebar");
-
-  // Opens/closes the mobile drawer and background overlay
-  const openSidebar = (open) => {
-    sidebar.classList.toggle("open", open);
-    scrim.classList.toggle("open", open);
-    btnSidebar?.setAttribute("aria-expanded", String(open));
-  };
-
-  btnSidebar?.addEventListener("click", () => {
-    openSidebar(!sidebar.classList.contains("open"));
-  });
-  scrim.addEventListener("click", () => openSidebar(false));
-
-  // Close mobile drawer on resize to desktop size
-  window.addEventListener("resize", () => {
-    if (window.innerWidth > 720) openSidebar(false);
+  map.flyTo({
+    center: [v.lng, v.lat],
+    zoom: 16,
+    speed: 1.2,      
+    curve: 1.42,     
+    padding: getFitPadding(),
   });
 }
 
 // --------------------
-// CLOCK
+// MAP INITIALIZATION
 // --------------------
 
-// Live clock updates in the top bar
-function setClock() {
-  const now = new Date();
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mm = String(now.getMinutes()).padStart(2, "0");
-  document.getElementById("clockText").textContent = `${hh}:${mm}`;
-}
-
-// --------------------
-// MAP INIT
-// --------------------
-
-// Map, route line, marker, popup behaviour, and map controls
 function initMap() {
-  const startLL = toLngLat(routeCoords[0]);
-  const endLL = toLngLat(routeCoords[1]);
-
   map = new maplibregl.Map({
     container: 'map',
     style: 'https://tiles.stadiamaps.com/styles/osm_bright.json',
-    center: startLL,
-    zoom: 14
+    center: [routeCoords[0].lng, routeCoords[0].lat],
+    zoom: 14,
+    dragRotate: false
   });
 
-  // Disable map rotation for simplicity
-  map.dragRotate.disable();
-  map.touchZoomRotate.disableRotation();
-
-  // Reused popup for hover/tap
-  hoverPopup = new maplibregl.Popup({
-    closeButton: false,
-    closeOnClick: false,
-    offset: 14
-  });
+  hoverPopup = new maplibregl.Popup({ closeButton: false, offset: 14 });
 
   map.on('load', () => {
-    // Route as GeoJSON LineString
-    const routeGeoJSON = {
-      type: 'Feature',
-      geometry: {
-        type: 'LineString',
-        coordinates: routeCoords.map(toLngLat)
-      }
-    };
-
+    // Shared Route Line
     map.addSource('route', {
       type: 'geojson',
-      data: routeGeoJSON
+      data: {
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: routeCoords.map(toLngLat) }
+      }
     });
 
     map.addLayer({
       id: 'route-line',
       type: 'line',
       source: 'route',
-      paint: {
-        'line-color': '#5aa7ff',
-        'line-width': 4
-      }
+      paint: { 'line-color': '#5aa7ff', 'line-width': 4 }
     });
 
-    // Route bounds for the map frame of the full route
-    const bounds = new maplibregl.LngLatBounds();
-    routeCoords.forEach(p => bounds.extend(toLngLat(p)));
-    map.fitBounds(bounds, { padding: getFitPadding() });
-
-    // Boat marker render
-    const el = document.createElement('div');
-    el.className = 'boat-marker in-transit';
-    el.setAttribute("aria-label", "Vessel position");
-
-    // Add the boat marker to the route start
-    boatMarker = new maplibregl.Marker({ element: el })
-      .setLngLat(startLL)
-      .addTo(map);
-
-    // Hover popup (desktop hover + mobile tap)
-    el.addEventListener("mouseenter", () => showBoatPopup());
-    el.addEventListener("mouseleave", () => hoverPopup.remove());
-    el.addEventListener("click", (e) => {
-      showBoatPopup();
-      focusVessel("edgcumbe-belle");
-      e.stopPropagation();
+    // Handle any vessels that were loaded via WS before the map was ready
+    Object.values(vessels).forEach(v => {
+      if (!v.marker) v.marker = createVesselMarker(v);
     });
 
-    // Close popup if you tap elsewhere on the map
-    map.on("click", () => hoverPopup.remove());
-
-    // Map controls
-    document.getElementById("btnZoomIn").addEventListener("click", () => map.zoomIn());
-    document.getElementById("btnZoomOut").addEventListener("click", () => map.zoomOut());
-    document.getElementById("btnRecenter").addEventListener("click", () => {
-      map.fitBounds(bounds, { padding: getFitPadding() });
+    // Map Controls
+    document.getElementById("btnZoomIn")?.addEventListener("click", () => map.zoomIn());
+    document.getElementById("btnZoomOut")?.addEventListener("click", () => map.zoomOut());
+    document.getElementById("btnRecenter")?.addEventListener("click", () => {
+      fitAllVessels();
     });
-
-    // Initial sidebar render
-    renderSidebar();
-
-    // Updates every 10s (same behavior as server)
-    //setInterval(updateFerryPosition, 10000); (Disabled for now)
   });
 }
 
-// Builds the small marker popup
-function showBoatPopup() {
-  const v = vessels[0];
-  if (!boatMarker) return;
-
-  const ll = boatMarker.getLngLat();
-  const html = `
-    <div class="popup-title">${v.name}</div>
-    <div class="popup-row"><span class="popup-muted">ETA</span> <span>${v.eta || "—"}</span></div>
-    <div class="popup-row"><span class="popup-muted">Dir</span> <span>${formatHeading(v.heading)}</span></div>
-  `;
-  hoverPopup.setLngLat([ll.lng, ll.lat]).setHTML(html).addTo(map);
-}
-
-// Centers the map on the selected vessel
-function focusVessel(id) {
-  if (!map || !boatMarker) return;
-  const ll = boatMarker.getLngLat();
-  map.easeTo({ center: [ll.lng, ll.lat], zoom: Math.max(map.getZoom(), 15), duration: 600 });
-}
-
 // --------------------
-// POSITION UPDATE
+// WEBSOCKET LOGIC
 // --------------------
 
-// Boat marker current position
-function updateFerryPosition() {
-  if (!boatMarker) return;
-
-  const current = boatMarker.getLngLat();
-  const startLL = toLngLat(routeCoords[0]);
-  const endLL = toLngLat(routeCoords[1]);
-
-  // Start point check
-  const isAtStart =
-    Math.abs(current.lng - startLL[0]) < 1e-6 &&
-    Math.abs(current.lat - startLL[1]) < 1e-6;
-
-  const next = isAtStart ? endLL : startLL;
-  boatMarker.setLngLat(next);
-
-  // Update vessel details used by sidebar + popup
-  const v = vessels[0];
-  v.heading = bearing([current.lng, current.lat], next);
-  v.eta = "≈ 8 min";
-  v.speed = 8.0;
-
-  // Update top status (time + text)
-  const status = document.getElementById('statusText');
-  const time = new Date().toLocaleTimeString();
-  const locationName = isAtStart ? 'Cremyll' : 'Stonehouse';
-  status.textContent = `Last updated: ${time} — Ferry approaching ${locationName}`;
-
-  renderSidebar();
-}
-
-// --------------------
-// BOOT
-// --------------------
-
-// DOM check before building the map
-document.addEventListener('DOMContentLoaded', () => {
-  wireSidebarControls();
-  setClock();
-  setInterval(setClock, 1000 * 10); // Refresh the clock every 10 seconds
-  initMap();
-});
-
-// Websocket stuff
-
-//Used for initialising the object
-const tracker = TrackerWS({
-  onUpdate: (id, lat, lng, ts) => {
-
-    if (!boatMarker) return;
-
-    boatMarker.setLngLat([lng, lat]);
-    map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 15), duration: 600 });
-
-    const v = vessels.find(v => v.id === id);
-    if (v) {
-      v.eta = "Live Update";
-      v.speed = 8.0;
-    }
-
-    renderSidebar();
-  },
-
-  onStatus: (s) => console.log("status", s),
-  onError: (e) => console.error("err", e),
-});
-
-//Subscribes to the UUID
-const entityId = entityIdUrl();
-
-if (entityId) {
-  tracker.subscribe([entityId]);
-}
-
-
-//Websocket connection function
-function TrackerWS({
-  baseUrl = "",
-  onUpdate,
-  onStatus = () => { },
-  onError = console.error,
-}) {
+function TrackerWS({ onUpdate, onStatus, onError }) {
   let ws = null;
   let subscribedIds = [];
 
-  function makeWsUrl(path) {
-    if (!baseUrl) {
-      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      return `${proto}//${window.location.host}${path}`;
-    }
-    const u = new URL(baseUrl);
-    const wsProto = u.protocol === "https:" ? "wss:" : "ws:";
-    return `${wsProto}//${u.host}${path}`;
-  }
+  const connect = () => {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${proto}//${window.location.host}/api/v1/entities/ws`;
 
-  const wsUrl = makeWsUrl("/api/v1/entities/ws");
-
-  //Used for connecting to websocket
-
-  function connect() {
     ws = new WebSocket(wsUrl);
-    ws.addEventListener("open", () => {
+
+    ws.onopen = () => {
       onStatus({ type: "connected" });
-
-      if (subscribedIds.length) {
-        subscribe(subscribedIds);
-      }
-    });
-
-    //Listens for any messages
-    ws.addEventListener("message", (event) => {
-      let msg;
-      try {
-        msg = JSON.parse(event.data);
-      } catch (e) {
-        onError({ type: "bad_json", raw: event.data, error: e });
-        return;
-      }
-
-      //Server Check
-      if (msg.status === "subscribed") {
-        onStatus({ type: "subscribed", entity_ids: msg.entity_ids });
-        return;
-      }
-
-      //Location updates
-      if (msg.type === "update" && msg.data) {
-        const { entity_id, latitude, longitude, timestamp } = msg.data;
-
-        if (
-          typeof entity_id === "string" &&
-          typeof latitude === "number" &&
-          typeof longitude === "number"
-        ) {
-          onUpdate(entity_id, latitude, longitude, timestamp);
-        } else {
-          onError({ type: "bad_update_shape", msg });
-        }
-        return;
-      }
-
-      onStatus({ type: "unknown_message", msg });
-    });
-
-    ws.addEventListener("error", (err) => {
-      onError({ type: "ws_error", err });
-    });
-
-    ws.addEventListener("close", () => {
-      onStatus({ type: "disconnected" });
-      ws = null;
-    });
-  }
-
-  //Subscribes to the entity id
-  function subscribe(entityIds) {
-    subscribedIds = Array.from(new Set(entityIds));
-
-    const payload = {
-      action: "subscribe",
-      entity_ids: subscribedIds,
+      if (subscribedIds.length) subscribe(subscribedIds);
     };
 
-    console.log("Sending the", payload)
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        // Initial snapshot
+        if (msg.status === "subscribed" && msg.entities) {
+          Object.entries(msg.entities).forEach(([id, data]) => {
+            onUpdate(id, data.last_location.lat, data.last_location.lng, data);
+          });
+        }
+        // Live updates
+        else if (msg.type === "update" && msg.data) {
+          const { entity_id, latitude, longitude, extra } = msg.data;
+          onUpdate(entity_id, latitude, longitude, extra);
+        }
+      } catch (e) {
+        onError(e);
+      }
+    };
 
-    if (!ws) {
+    ws.onclose = () => {
+      onStatus({ type: "disconnected" });
+      setTimeout(connect, 5000); // Reconnect loop
+    };
+  };
+
+  const subscribe = (ids) => {
+    subscribedIds = ids;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ action: "subscribe", entity_ids: ids }));
+    } else if (!ws) {
       connect();
-      return;
     }
+  };
 
-    if (ws.readyState === WebSocket.CONNECTING) {
-      ws.addEventListener(
-        "open",
-        () => ws.send(JSON.stringify(payload)),
-        { once: true }
-      );
-      return
-    }
-
-    if (ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify(payload));
-  }
-
-  //Used for disconnect
-  function disconnect() {
-    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState ===
-      WebSocket.CONNECTING)) {
-      ws.close();
-    }
-    ws = null;
-  }
-  window.addEventListener("pagehide", () => disconnect());
-
-  return { connect, subscribe, disconnect };
+  return { subscribe };
 }
 
+// --------------------
+// BOOTSTRAP
+// --------------------
 
+document.addEventListener('DOMContentLoaded', () => {
+  // 1. Setup UI Clock
+  const updateClock = () => {
+    const now = new Date();
+    const clockEl = document.getElementById("clockText");
+    if (clockEl) clockEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+  updateClock();
+  setInterval(updateClock, 10000);
 
+  // 2. Init Map
+  initMap();
+
+  // 3. Init Tracker
+  const tracker = TrackerWS({
+    onUpdate: (id, lat, lng, extra) => syncVesselData(id, lat, lng, extra),
+    onStatus: (s) => console.log("Tracker:", s),
+    onError: (e) => console.error("Tracker Error:", e)
+  });
+
+  // 4. Subscribe based on URL or defaults
+  const pathParts = window.location.pathname.split("/");
+  const entityId = pathParts[pathParts.length - 1];
+
+  // If the URL has a specific ID, use it, otherwise subscribe to a default set
+  const initialSubs = (entityId && entityId !== "map") ? [entityId] : ["edgcumbe-belle"];
+  tracker.subscribe(initialSubs);
+});
