@@ -2,7 +2,13 @@ import json
 from contextlib import suppress
 
 import redis.asyncio as redis
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+import shapely
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from geoalchemy2.shape import to_shape
+
+from core.database import AsyncSession, get_db_session
+
+from .. import crud
 
 router = APIRouter(tags=["websockets"])
 
@@ -35,7 +41,9 @@ ws_manager = TrackingWebSocketManager()
 
 
 @router.websocket("/entities/ws")
-async def entities_websocket(websocket: WebSocket):
+async def entities_websocket(
+    websocket: WebSocket, db: AsyncSession = Depends(get_db_session)
+):
     await ws_manager.connect(websocket)
     try:
         while True:
@@ -45,10 +53,15 @@ async def entities_websocket(websocket: WebSocket):
                     websocket,
                     message.get("entity_ids", []),
                 )
+
+                entity_info = await crud.get_entities_info(
+                    db, message.get("entity_ids", [])
+                )
+
                 await websocket.send_json(
                     {
                         "status": "subscribed",
-                        "entity_ids": message.get("entity_ids", []),
+                        "entities": entity_info,
                     }
                 )
     except WebSocketDisconnect:
