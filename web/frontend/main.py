@@ -75,7 +75,7 @@ async def get_admin(
 ) -> fastapi.responses.HTMLResponse:
 
     return templates.TemplateResponse(
-        "admin_page.html", {"request": request, "entity_id": entity_id, "SENTRY_DSN": settings.SENTRY_DSN}
+        "admin_page.html", {"request": request, "entity_id": entity_id}
     )
 
 
