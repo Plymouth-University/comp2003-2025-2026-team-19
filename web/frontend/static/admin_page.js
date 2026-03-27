@@ -1,3 +1,4 @@
+//Ferry data
 const entity_list = [
   {
     "id": "b85e5637-4791-4aa4-abec-a2ac3e4a946e",
@@ -105,15 +106,70 @@ function closeSettings() {
   document.getElementById("settings_panel").style.display = "none";
 }
 
+//Activty Graph Functionality
+
+//Constructs the activity graph
+const maxBars = 40;
+const activityData = Array.from({length: maxBars}, () => 0);
+
+const activityChart = new Chart(document.getElementById("activityChart"), {
+  type: "bar",
+  data: {
+    labels: Array(maxBars).fill(""),
+    datasets: [{
+      data: activityData,
+      //Highlights most recent bar lighter so its more noticeable
+      backgroundColor: activityData.map((_, i) =>
+        i === activityData.length - 1 ? "#4d9de0" : "rgba(59,130,210,0.45)"
+    ),
+      borderWidth: 0, 
+      borderRadius: 2,
+      barPercentage: 0.75
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { legend: { display: false } },
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { display: false },
+      y: {
+        min: 0, max: 100,
+        ticks: {color: "#2a4a6a", font: { size: 20}, stepSize: 25 },
+        grid: { color: "rgba(30,58,95,0.4)" },
+        border: { display: false }
+      }
+    }
+  }
+});
+
+//Adds new right side bar and drops the furthest left bar if container is full
+function pushActivityBar(value) {
+  activityChart.data.datasets[0].data.push(value);
+  activityChart.data.datasets[0].data.shift();
+  activityChart.data.labels.push("");
+  activityChart.data.labels.shift();
+  activityChart.data.datasets[0].backgroundColor =
+    activityChart.data.datasets[0].data.map((_, i) =>
+      //Reapplies highlist to latest bar after each individual update
+      i === activityChart.data.datasets[0].data.length - 1
+        ? "#4d9de0" : "rgba(59,130,210,0.45)"
+    );
+  activityChart.update();
+}
+
 //Used for getting the metrics data to be displayed on the admin page
 let metricsData = [];
 
+//Calculates and displays all requests, average latency, and status code count
 function renderStats(data) {
   if (data.length === 0) return;
 
   const totalRequests = data.length;
   const avgLatency = (data.reduce((sum, row) => sum + row.latency_ms, 0)
   / totalRequests).toFixed(2);
+    //Counts status codes
     const statusCounts = data.reduce((acc, row) => {
       acc[row.status] = (acc[row.status] || 0) + 1;
       return acc;
@@ -127,6 +183,7 @@ function renderStats(data) {
           .join(" | ");
   }
 
+  //Fetches latest metric data to be displayed on the frontend
   async function fetchMetrics() {
     try {
       const res = await fetch("/metrics");
@@ -136,10 +193,12 @@ function renderStats(data) {
       }
       metricsData = await res.json();
       renderStats(metricsData);
+      pushActivityBar(metricsData.length); //Used to display requests on the activity graph
     } catch (err) {
       console.error("Failed to fetch the metrics data", err);
     }
   }
 
+//Checks metrics every 3 seconds
 setInterval(fetchMetrics, 3000);
 fetchMetrics();
