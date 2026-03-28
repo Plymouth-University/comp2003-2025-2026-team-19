@@ -59,6 +59,8 @@ main{
 
 .security_panel{
   grid-column: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .trackers_panel{
@@ -151,25 +153,58 @@ html, body {
   scrollbar-color: rgba(24, 146, 247, 0.8) rgba(255,255,255,0.08);
 }
 
-.tracker_scroll::-webkit-scrollbar{
+.trackers_scroll::-webkit-scrollbar{
   width: 10px;
 }
 
-.tracker_scroll::-webkit-scrollbar-track{
+.trackers_scroll::-webkit-scrollbar-track{
   background: rgba(255,255,255,0.8);
   border-radius: 20px;
 }
 
-.tracker_scroll::-webkit-scrollbar-thumb{
+.trackers_scroll::-webkit-scrollbar-thumb{
   background: var(--accent);
   border-radius: 20px;
   border: 2px solid rgba(0,0,0,0);
   background-clip: padding-box;
 }
 
-.tracker_scroll::-webkit-scrollbar-thumb:hover{
+.trackers_scroll::-webkit-scrollbar-thumb:hover{
   background: #7cbcff;
 }
+
+/*Dupe scroll for the security container*/
+/* Used for the customised scrollbar*/
+.security_scroll{
+  max-height: 150px;
+  margin-top: 10px;
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(24, 146, 247, 0.8) rgba(255,255,255,0.08);
+}
+
+.security_scroll::-webkit-scrollbar{
+  width: 10px;
+}
+
+.security_scroll::-webkit-scrollbar-track{
+  background: rgba(255,255,255,0.8);
+  border-radius: 20px;
+}
+
+.security_scroll::-webkit-scrollbar-thumb{
+  background: var(--accent);
+  border-radius: 20px;
+  border: 2px solid rgba(0,0,0,0);
+  background-clip: padding-box;
+}
+
+.security_scroll::-webkit-scrollbar-thumb:hover{
+  background: #7cbcff;
+}
+
+/*Settings customisation*/
 
 .settings_button{
   padding: 10px 18px;

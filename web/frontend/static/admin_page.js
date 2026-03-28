@@ -202,3 +202,50 @@ function renderStats(data) {
 //Checks metrics every 3 seconds
 setInterval(fetchMetrics, 3000);
 fetchMetrics();
+
+//Security Alerts functionality
+
+//For rendering the security alerts into the security container
+function renderingSecurityAlerts(alerts) {
+  const container = document.getElementById("security_list");
+  container.innerHTML = "";
+
+  if (alerts.length === 0) {
+    container.innerHTML = `<li class="no_alerts">No alerts detected</li>`;
+    return;
+  }
+
+  //Most recent alerts bumped
+  [...alerts].reverse().forEach(alert => {
+    const li = document.createElement("li");
+    li.className = `security_alert severity_${alert.severity}`;
+    li.innerHTML = `
+      <span class="alert_type">${alert.type}</span>
+      <span class="alert_message">${alert.message}</span>
+      <div class="alert_meta">
+        <span>${alert.ip}</span>
+        <span>${alert.time}</span>
+      </div>
+    `;
+    container.appendChild(li)
+  });
+}
+
+//Finds alerts from backened to render in the container
+async function fetchSecurityAlerts() {
+  try {
+    const res = await fetch("/security");
+    if (!res.ok) {
+      console.warn("Security endpoint found", res.status);
+      return;
+    }
+    const alerts = await res.json();
+    renderingSecurityAlerts(alerts);
+  } catch (err) {
+    console.error("Failed to find valid security alerts:", err);
+  }
+}
+
+//Checks every five seconds
+setInterval(fetchSecurityAlerts, 5000);
+fetchSecurityAlerts();

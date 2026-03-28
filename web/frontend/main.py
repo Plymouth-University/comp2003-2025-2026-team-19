@@ -17,9 +17,53 @@ serving html pages and static assets.",
 
 app.mount("/static", static, name="static")
 
+#Security vulnerability paths to check
+SusPaths = ["/.env", "/wp-login.php", "/phpmyadmin", "/config", "/shell"]
+SusExtensions = [".php", ".asp", ".aspx", ".cgi", ".sh"]
+
+#Used for rate limiting
+from collections import defaultdict
+ip_requests_count = defaultdict(list)
+
+#Security alert logging
+
+alerts = []
+
+#Used to protect visitor IPs in the frontend
+def ip_mask(ip: str) -> str:
+    parts = ip.split(".")
+    if len(parts) == 4:
+        return f"{parts[0]}.{parts[1]}.{parts[2]}.xxx"
+    return ip
+
+#Needed as server will be constantly on and helps stop the security container from being flooded with info
+maxAlerts = 300
+
+def log_alert(alert_type: str, message: str, ip: str, severity: str):
+    """Adds security alerts to list
+    Args:
+        alert_type (str): Label
+        message (str): Description of alert
+        ip (str): IP address of request
+        severity (str): light or major alert
+    """
+    alerts.append({
+        "type": alert_type,
+        "message": message,
+        "ip": ip_mask(ip),
+        "time": time.strftime("%H:%M:%S"),
+        "severity": severity
+    })
+
+    if lens(alerts) > maxAlerts:
+        alerts.pop(0)
+
+@app.get("/security")
+async def get_security():
+    return alerts[-20:]
+
 #Used for retrieving metric data as the server runs i.e. current request
 #average latency, status codes, etc
-
 metrics = []
 
 @app.middleware("http")
@@ -33,12 +77,66 @@ async def record_metrics(request: Request, call_next):
             "latency_ms": round((time.time() - start ) * 1000, 2),
             "timestamp": time.strftime("%H:%M:%S")
         })
+        ip = request.client.host
+        #Used for looking for sus activity in file paths ඞ
+        if request.url.path in SusPaths:
+            log_alert(
+                alert_type="Unusual activity",
+                message=f"Probe attempt on {request.url.path}",
+                ip=ip,
+                severity="critical"
+            )
+        #In case any scanner asks for a .php or asp file
+        if any(request.url.path.endswith(ext) for ext in SusExtensions):
+            log_alert(
+                alert_type="Suspicious File Request",
+                message=f"Request for suspicious file type: {request.url.path}",
+                ip=ip,
+                severity="warning"
+            )
+        #If needed file is missing
+        if response.status_code == 404:
+            log_alert(
+                alert_type="404 Not Found",
+                message=f"Missing resource requested: {request.url.path}",
+                ip=request.client.host,
+                severity="warning"
+            )
+        #Flags internal server errors
+        if response.status_code == 500:
+            log_alert(
+                alert_type="Server Error",
+                message=f"Critical Server Error on {request.url.path}",
+                ip=ip,
+                severity="critical"
+            )
+        #Rate limits if too many requests are made
+        now = time.time()
+        ip_requests_count[ip] = [t for t in ip_requests_count[ip] if now -t < 60]
+        ip_requests_count[ip].append(now)
+        if len(ip_requests_count[ip]) > 50:
+            log_alert(
+                alert_type="Rate Limit",
+                message=f"Unusually high request volume: {len(ip_requests_count[ip])} requests in 60s",
+                ip=ip,
+                severity="critical"
+            )
+        #For slow response times which could indicate server issues
+        latency = round((time.time() - start) * 1000, 2)
+        if latency > 2000:
+            log_alert(
+                alert_type="Slow Response",
+                message=f"Request to {request.url.path} took {latency}ms",
+                ip=ip,
+                severity="warning"
+            )
     return response
 
 @app.get("/metrics")
 async def get_metrics():
     return metrics [-50:]
 
+#Routes
 @app.get("/")
 async def get_root():
     """Returns a welcome message or the index page.
