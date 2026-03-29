@@ -66,6 +66,8 @@ async def entities_websocket(
                 )
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
 
 
 async def redis_listener():
