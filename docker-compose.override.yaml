@@ -39,3 +39,7 @@ services:
           target: /app/core
         - action: rebuild
           path: pyproject.toml
+
+  redis:
+    ports:
+      - "6379:6379"
