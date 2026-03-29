@@ -45,9 +45,9 @@ function calculateBearing(start, end) {
 
 function getFitPadding() {
   const isMobile = window.innerWidth <= 720;
-  return isMobile 
-    ? { top: 120, bottom: 40, left: 40, right: 40 } 
-    : { top: 120, bottom: 100, left: 380, right: 60 };
+  return isMobile
+    ? { top: 120, bottom: 80, left: 20, right: 20 }
+    : { top: 120, bottom: 40, left: 342, right: 60 };
 }
 
 function fitAllVessels() {
@@ -64,10 +64,7 @@ function fitAllVessels() {
     bounds.extend([v.lng, v.lat]);
   });
 
-  // 3. Fit the map to these bounds
-  // Padding helps keep markers away from the UI overlays (sidebar/header)
   map.fitBounds(bounds, {
-    padding: getFitPadding(),
     maxZoom: 16, // Prevents zooming in too far if there's only one point
     duration: 1000 // Smooth animation
   });
@@ -112,18 +109,15 @@ function syncVesselData(id, lat, lng, extra = {}) {
   v.lastUpdated = new Date().toLocaleTimeString();
 
   const now = new Date();
-  const timestamp = now.toLocaleTimeString([], { 
-    hour: '2-digit', 
-    minute: '2-digit', 
-    second: '2-digit' 
+  const timestamp = now.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
   });
   v.lastUpdated = timestamp;
 
   // 3. Update the Top Bar Status Text
-  const statusEl = document.getElementById("statusText");
-  if (statusEl) {
-    statusEl.innerHTML = `Status: <span style="color: var(--green)">Live</span> • Last update: ${timestamp}`;
-  }
+  updateStatusText("Live")
 
   // 3. Sync with Map (if map is ready)
   if (map) {
@@ -131,10 +125,6 @@ function syncVesselData(id, lat, lng, extra = {}) {
       v.marker = createVesselMarker(v);
     }
     v.marker.setLngLat([lng, lat]);
-    if (!hasInitialFit) {
-      fitAllVessels();
-      hasInitialFit = true;
-    }
   }
 
   // 4. Update UI
@@ -166,6 +156,26 @@ function createVesselMarker(v) {
 // UI RENDERING
 // --------------------
 
+function updateCounts() {
+  const totalEl = document.getElementById("countAll");
+  const activeEl = document.getElementById("countActive");
+  const dockedEl = document.getElementById("countDocked");
+
+  let total = 0;
+  let active = 0;
+  let docked = 0;
+
+  Object.values(vessels).forEach(v => {
+    total++;
+    if (v.status === "in_transit") active++;
+    if (v.status === "docked") docked++;
+  });
+
+  if (totalEl) totalEl.textContent = total;
+  if (activeEl) activeEl.textContent = active;
+  if (dockedEl) dockedEl.textContent = docked;
+}
+
 function renderSidebar() {
   const vesselList = document.getElementById("vesselList");
   if (!vesselList) return;
@@ -190,6 +200,7 @@ function renderSidebar() {
     `;
     card.addEventListener("click", () => focusVessel(v.id));
     vesselList.appendChild(card);
+    updateCounts();
   });
 }
 
@@ -209,8 +220,8 @@ function focusVessel(id) {
   map.flyTo({
     center: [v.lng, v.lat],
     zoom: 16,
-    speed: 1.2,      
-    curve: 1.42,     
+    speed: 1.2,
+    curve: 1.42,
     padding: getFitPadding(),
   });
 }
@@ -231,6 +242,8 @@ function initMap() {
   hoverPopup = new maplibregl.Popup({ closeButton: false, offset: 14 });
 
   map.on('load', () => {
+    map.setPadding(getFitPadding());
+
     // Shared Route Line
     map.addSource('route', {
       type: 'geojson',
@@ -255,11 +268,32 @@ function initMap() {
     // Map Controls
     document.getElementById("btnZoomIn")?.addEventListener("click", () => map.zoomIn());
     document.getElementById("btnZoomOut")?.addEventListener("click", () => map.zoomOut());
-    document.getElementById("btnRecenter")?.addEventListener("click", () => {
+    document.getElementById("btnFit")?.addEventListener("click", () => {
       fitAllVessels();
     });
+
+    if (!hasInitialFit) {
+      fitAllVessels();
+      hasInitialFit = true;
+    }
   });
 }
+
+function updateStatusText(text, color = "var(--green)") {
+  const statusEl = document.getElementById("status");
+  const statusText = statusEl.querySelector("span#statusText");
+  if (statusText) {
+    statusText.style.color = color;
+    statusText.innerHTML = `${text}`;
+  }
+
+  const timestampEl = statusEl.querySelector("span#statusTimestamp");
+  if (timestampEl) {
+    const now = new Date();
+    timestampEl.innerHTML = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+}
+
 
 // --------------------
 // WEBSOCKET LOGIC
@@ -284,13 +318,16 @@ function TrackerWS({ onUpdate, onStatus, onError }) {
       try {
         const msg = JSON.parse(event.data);
         // Initial snapshot
+        console.log("Received message:", msg);
         if (msg.status === "subscribed" && msg.entities) {
+          console.log("Subscribed to entities:", msg.entities);
           Object.entries(msg.entities).forEach(([id, data]) => {
             onUpdate(id, data.last_location.lat, data.last_location.lng, data);
           });
         }
         // Live updates
         else if (msg.type === "update" && msg.data) {
+          console.log("Received update for", msg.data.entity_id, "at", msg.data.latitude, msg.data.longitude);
           const { entity_id, latitude, longitude, extra } = msg.data;
           onUpdate(entity_id, latitude, longitude, extra);
         }
@@ -342,10 +379,29 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // 4. Subscribe based on URL or defaults
-  const pathParts = window.location.pathname.split("/");
-  const entityId = pathParts[pathParts.length - 1];
+  let params = new URLSearchParams(window.location.search);
+  let entityIds = params.get("entity_ids");
+  if (entityIds) {
+    console.log("Subscribing to specific entities from URL:", entityIds);
+    try {
+      entityIds = entityIds.split(",").map(id => id.trim()).filter(id => id);
+    } catch (e) {
+      console.error("Error parsing entity_ids from URL:", e);
+      entityIds = [];
+    }
+  } else {
+    console.log("Subscribing to all entities");
+    entityIds = [];
+  };
 
-  // If the URL has a specific ID, use it, otherwise subscribe to a default set
-  const initialSubs = (entityId && entityId !== "map") ? [entityId] : ["edgcumbe-belle"];
+  // If the URL has a specific ID, use it, otherwise subscribe to all active entities
+  const initialSubs = entityIds.length ? entityIds : "all";
   tracker.subscribe(initialSubs);
+});
+
+window.addEventListener("resize", () => {
+  if (map) {
+    // This dynamically updates the 'logical center' for zoomIn/Out
+    map.setPadding(getFitPadding());
+  }
 });
