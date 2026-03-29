@@ -1,6 +1,8 @@
 import fastapi
-from fastapi import Request
+from fastapi import Request, Depends, HTTPException
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import time
+import secrets
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from core.settings import settings
@@ -16,6 +18,17 @@ serving html pages and static assets.",
 )
 
 app.mount("/static", static, name="static")
+
+#Log in authentication
+security = HTTPBasic()
+
+#Checks presented log-in details
+def require_admin(credentials: HTTPBasicCredentials = Depends(security)):
+    valid_user = secrets.compare_digest(credentials.username, settings.ADMIN_USER)
+    valid_pass = secrets.compare_digest(credentials.password, settings.ADMIN_PASSWORD)
+    #Rejects log-in if details aren't exactly what's presented in the .env
+    if not (valid_user and valid_pass):
+        raise HTTPException(status_code=401, detail="Unauthorised")
 
 #Security vulnerability paths to check
 SusPaths = ["/.env", "/wp-login.php", "/phpmyadmin", "/config", "/shell"]
@@ -55,7 +68,7 @@ def log_alert(alert_type: str, message: str, ip: str, severity: str):
         "severity": severity
     })
 
-    if lens(alerts) > maxAlerts:
+    if len(alerts) > maxAlerts:
         alerts.pop(0)
 
 @app.get("/security")
@@ -169,7 +182,7 @@ async def get_status(
 
 @app.get("/admin/{entity_id}")
 async def get_admin(
-    request: fastapi.Request, entity_id: str
+    request: fastapi.Request, entity_id: str, _=Depends(require_admin) #Forces a valid log-in for admin page access
 ) -> fastapi.responses.HTMLResponse:
 
     return templates.TemplateResponse(

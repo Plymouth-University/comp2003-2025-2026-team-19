@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     MIGRATION_DB_USER: str = "alembic_user"
     MIGRATOR_PASSWORD: str = "alembic_password"
 
+    ADMIN_USER: str
+    ADMIN_PASSWORD: str
+
     REDIS_HOST: str = "redis"
 
     @computed_field
