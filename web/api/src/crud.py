@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from sqlalchemy import desc, func, select
@@ -8,6 +9,8 @@ from core.models import Entity, EntityOnRoute, GPSTelemetry, Location, Route
 
 from .exceptions import EntityNotFoundError
 from .schema.entity import ReadEntity
+
+logger = logging.getLogger("uvicorn")
 
 
 async def get_entity_by_uuid(db: AsyncSession, entity_id: UUID) -> ReadEntity:
@@ -49,24 +52,26 @@ async def get_entities_info(
             map(str, (await db.execute(select(Entity.uuid))).scalars().all())
         )
 
+        logger.info(f"Subscribing to all entities: {entity_uuids}")
+
     stmt = (
         select(
-            GPSTelemetry,
             Entity,
+            GPSTelemetry,
             Route.uuid.label("route_uuid"),
             StartLoc.name.label("origin"),
             EndLoc.name.label("destination"),
             func.ST_X(GPSTelemetry.geom).label("lng"),
             func.ST_Y(GPSTelemetry.geom).label("lat"),
         )
-        .distinct(GPSTelemetry.entity_id)
-        .join(Entity, Entity.id == GPSTelemetry.entity_id)
+        .distinct(Entity.id)
+        .outerjoin(GPSTelemetry, Entity.id == GPSTelemetry.entity_id)
         .outerjoin(EntityOnRoute, EntityOnRoute.entity_id == Entity.id)
         .outerjoin(Route, Route.id == EntityOnRoute.route_id)
         .outerjoin(StartLoc, StartLoc.id == Route.start_location_id)
         .outerjoin(EndLoc, EndLoc.id == Route.end_location_id)
         .where(Entity.uuid.in_(entity_uuids))
-        .order_by(GPSTelemetry.entity_id, desc(GPSTelemetry.timestamp))
+        .order_by(Entity.id, desc(GPSTelemetry.timestamp))
     )
 
     result = await db.execute(stmt)
@@ -80,11 +85,20 @@ async def get_entities_info(
                 "origin": row.origin,
                 "destination": row.destination,
             },
-            "last_location": {
-                "lat": row.lat,
-                "lng": row.lng,
-                "ts": row.GPSTelemetry.timestamp.isoformat(),
-            },
+            # Handle None values for entities without telemetry
+            "last_location": (
+                {
+                    "lat": row.lat,
+                    "lng": row.lng,
+                    "ts": (
+                        row.GPSTelemetry.timestamp.isoformat()
+                        if row.GPSTelemetry
+                        else None
+                    ),
+                }
+                if row.GPSTelemetry
+                else None
+            ),
         }
         for row in rows
     }

@@ -54,20 +54,25 @@ function fitAllVessels() {
   if (!map) return;
 
   const bounds = new maplibregl.LngLatBounds();
+  const activeVessels = Object.values(vessels).filter(v => v.lng !== null && v.lat !== null);
 
-  // 1. Include the static route coordinates
-  routeCoords.forEach(p => bounds.extend([p.lng, p.lat]));
+  if (activeVessels.length > 0) {
+    routeCoords.forEach(p => bounds.extend([p.lng, p.lat]));
+    activeVessels.forEach(v => {
+      bounds.extend([v.lng, v.lat]);
+    });
+  } else {
+    routeCoords.forEach(p => bounds.extend([p.lng, p.lat]));
+  }
 
-  // 2. Include all active vessel positions
-  const activeVessels = Object.values(vessels);
-  activeVessels.forEach(v => {
-    bounds.extend([v.lng, v.lat]);
-  });
-
-  map.fitBounds(bounds, {
-    maxZoom: 16, // Prevents zooming in too far if there's only one point
-    duration: 1000 // Smooth animation
-  });
+  // Safety check: ensure bounds are not empty before fitting
+  if (!bounds.isEmpty()) {
+    map.fitBounds(bounds, {
+      maxZoom: 16,
+      duration: 1000,
+      essential: true
+    });
+  }
 }
 
 // --------------------
@@ -99,13 +104,17 @@ function syncVesselData(id, lat, lng, extra = {}) {
   const v = vessels[id];
 
   // 2. Update movement logic
-  if (v.lat !== lat || v.lng !== lng) {
-    v.heading = calculateBearing([v.lng, v.lat], [lng, lat]);
+  if (lat && lng) {
+    if (v.lat !== lat || v.lng !== lng) {
+      v.heading = calculateBearing([v.lng, v.lat], [lng, lat]);
+    }
+  } else {
+    v.heading = null;
   }
 
   v.lat = lat;
   v.lng = lng;
-  v.speed = extra.speed || 8.0;
+  v.speed = extra.speed || null;
   v.lastUpdated = new Date().toLocaleTimeString();
 
   const now = new Date();
@@ -116,15 +125,14 @@ function syncVesselData(id, lat, lng, extra = {}) {
   });
   v.lastUpdated = timestamp;
 
-  // 3. Update the Top Bar Status Text
-  updateStatusText("Live")
-
   // 3. Sync with Map (if map is ready)
   if (map) {
-    if (!v.marker) {
+    if (!v.marker && lat && lng) {
       v.marker = createVesselMarker(v);
     }
-    v.marker.setLngLat([lng, lat]);
+    if (v.marker) {
+      v.marker.setLngLat([lng, lat]);
+    }
   }
 
   // 4. Update UI
@@ -193,7 +201,7 @@ function renderSidebar() {
       </div>
       <div class="vessel-sub">${v.route}</div>
       <div class="vessel-meta">
-        <div>${v.speed.toFixed(1)} kts</div>
+        <div>${v.speed !== null ? v.speed.toFixed(1) : 'N/A'} kts</div>
         <div>${formatHeading(v.heading)}</div>
         <div style="color: var(--muted)">Updated ${v.lastUpdated}</div>
       </div>
@@ -215,7 +223,7 @@ function showBoatPopup(v) {
 
 function focusVessel(id) {
   const v = vessels[id];
-  if (!map || !v) return;
+  if (!map || !v || !v.marker) return;
 
   map.flyTo({
     center: [v.lng, v.lat],
@@ -262,7 +270,7 @@ function initMap() {
 
     // Handle any vessels that were loaded via WS before the map was ready
     Object.values(vessels).forEach(v => {
-      if (!v.marker) v.marker = createVesselMarker(v);
+      if (!v.marker && v.lat && v.lng) v.marker = createVesselMarker(v);
     });
 
     // Map Controls
@@ -307,10 +315,15 @@ function TrackerWS({ onUpdate, onStatus, onError }) {
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${proto}//${window.location.host}/api/v1/entities/ws`;
 
-    ws = new WebSocket(wsUrl);
-
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch (e) {
+      onError(e);
+    }
     ws.onopen = () => {
       onStatus({ type: "connected" });
+      updateStatusText("Live");
+
       if (subscribedIds.length) subscribe(subscribedIds);
     };
 
@@ -322,7 +335,10 @@ function TrackerWS({ onUpdate, onStatus, onError }) {
         if (msg.status === "subscribed" && msg.entities) {
           console.log("Subscribed to entities:", msg.entities);
           Object.entries(msg.entities).forEach(([id, data]) => {
-            onUpdate(id, data.last_location.lat, data.last_location.lng, data);
+            const lat = data.last_location ? data.last_location.lat : null;
+            const lng = data.last_location ? data.last_location.lng : null;
+
+            onUpdate(id, lat, lng, data);
           });
         }
         // Live updates
@@ -338,6 +354,7 @@ function TrackerWS({ onUpdate, onStatus, onError }) {
 
     ws.onclose = () => {
       onStatus({ type: "disconnected" });
+      updateStatusText("Reconnecting...", "var(--amber)");
       setTimeout(connect, 5000); // Reconnect loop
     };
   };
