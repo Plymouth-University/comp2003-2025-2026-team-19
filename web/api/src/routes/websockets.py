@@ -1,16 +1,19 @@
+import asyncio
 import json
-from contextlib import suppress
+import logging
 
 import redis.asyncio as redis
-import shapely
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from geoalchemy2.shape import to_shape
 
 from core.database import AsyncSession, get_db_session
+from core.settings import settings
 
 from .. import crud
 
 router = APIRouter(tags=["websockets"])
+
+logger = logging.getLogger("uvicorn")
 
 
 class TrackingWebSocketManager:
@@ -49,14 +52,11 @@ async def entities_websocket(
         while True:
             message: dict = await websocket.receive_json()
             if message.get("action") == "subscribe":
-                await ws_manager.subscribe(
-                    websocket,
-                    message.get("entity_ids", []),
-                )
-
                 entity_info = await crud.get_entities_info(
                     db, message.get("entity_ids", [])
                 )
+
+                await ws_manager.subscribe(websocket, list(entity_info.keys()))
 
                 await websocket.send_json(
                     {
@@ -69,16 +69,49 @@ async def entities_websocket(
 
 
 async def redis_listener():
-    r = redis.from_url("redis://redis:6379/0")
-    pubsub = r.pubsub()
-    await pubsub.subscribe("location_updates")
-    try:
-        async for message in pubsub.listen():
-            if message.get("type") == "message":
-                data: dict = json.loads(message["data"])
-                entity_id = data.get("entity_id")
-                if entity_id is not None:
-                    await ws_manager.broadcast(entity_id, data)
-    finally:
-        await pubsub.unsubscribe("location_updates")
-        await r.close()
+    retry_delay = 1  # Start with 1 second delay
+    max_delay = 60  # Cap the delay at 1 minute
+
+    while True:
+        try:
+            logger.info(f"Connecting to Redis at {settings.REDIS_HOST}...")
+            # Added decode_responses=True so message["data"] is a string, not bytes
+            r = redis.from_url(
+                f"redis://{settings.REDIS_HOST}:6379/0",
+                decode_responses=True,
+            )
+
+            async with r.pubsub() as pubsub:
+                await pubsub.subscribe("location_updates")
+                logger.info("Subscribed to 'location_updates' channel")
+
+                # Reset retry delay on successful connection
+                retry_delay = 1
+
+                async for message in pubsub.listen():
+                    if message.get("type") == "message":
+                        try:
+                            data = json.loads(message["data"])
+                            entity_id = data.get("entity_id")
+                            if entity_id:
+                                await ws_manager.broadcast(str(entity_id), data)
+                        except json.JSONDecodeError:
+                            logger.error(f"Malformed JSON received: {message['data']}")
+                        except Exception as e:
+                            logger.error(f"Error broadcasting message: {e}")
+
+        except (ConnectionError, TimeoutError, OSError) as e:
+            logger.warning(
+                f"Redis connection failed: {e}. Retrying in {retry_delay}s..."
+            )
+            await asyncio.sleep(retry_delay)
+            # Exponential backoff
+            retry_delay = min(retry_delay * 2, max_delay)
+
+        except asyncio.CancelledError:
+            logger.info("Redis listener task cancelled.")
+            break  # Exit the while loop gracefully
+
+        except Exception as e:
+            logger.error(f"Unexpected error in Redis listener: {e}")
+            await asyncio.sleep(5)  # Avoid tight-looping on logic errors

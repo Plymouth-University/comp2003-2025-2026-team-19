@@ -1,5 +1,3 @@
-from cProfile import label
-from os import name
 from uuid import UUID
 
 from sqlalchemy import desc, func, select
@@ -45,6 +43,11 @@ async def get_entities_info(
 ) -> dict[str, dict]:
     StartLoc = aliased(Location)
     EndLoc = aliased(Location)
+
+    if entity_uuids == "all":
+        entity_uuids = list(
+            map(str, (await db.execute(select(Entity.uuid))).scalars().all())
+        )
 
     stmt = (
         select(
