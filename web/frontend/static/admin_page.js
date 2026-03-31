@@ -11,7 +11,6 @@ function saveSetting(key, value) {
   startMetricsPolling();
 }
 
-
 //Ferry data
 const entity_list = [
   {
@@ -19,43 +18,43 @@ const entity_list = [
     "name": "Plymouth Venturer",
     "route": null,
     "active": false,
-    "last_updated": "10-03-10 18:35"
+    "last_updated": null
   },
   {
     "id": "fa7fa868-8eac-4e20-a69c-b7b7c17364bb",
     "name": "Plymouth Sound",
     "route": null,
     "active": false,
-    "last_updated": "10-03-10 18:35"
+    "last_updated": null
   },
   {
     "id": "fa0a1599-8de1-4e08-aee8-f1607e1359cb",
     "name": "Tamar Belle",
     "route": null,
     "active": false,
-    "last_updated": "10-03-10 18:35"
+    "last_updated": null
   },
   {
     "id": "add9ce40-e60c-41b4-b6e9-e7dc3185849c",
     "name": "Plymouth Princess",
     "route": null,
     "active": false,
-    "last_updated": "10-03-10 18:35"
+    "last_updated": null
   },
   {
     "id": "9e2f2cbd-2671-4972-9115-c0bd8d5cef2d",
     "name": "Island Princess",
     "route": null,
     "active": false,
-    "last_updated": "10-03-10 18:35"
+    "last_updated": null
   },
   {
     "id": "072caf2a-a921-4128-8369-75b237c42161",
     "name": "Edgcumbe Belle",
     "route": null,
     "active": false,
-    "last_updated": "10-03-10 18:35"
-  },
+    "last_update": null
+  }
 ]
 
 function updateEntityList(entity_list) {
@@ -70,10 +69,11 @@ function updateEntityList(entity_list) {
       const li = document.createElement("li");
       
       //Used for checking ferry status
-      const statusClass = entity.active ? "status-green" : "status-red";
+      const active = isTrackerActive(entity.last_updated, 60);
+      const statusClass = active ? "status-green" : "status-red";
 
       //List acts differently depending if route data is null or not
-      if (entity.route === null) {
+      if (!entity.route) {
       //Uses innerHTML to display entities and use break
       li.innerHTML = `
       <a href="/status/${entity.id}">
@@ -107,10 +107,32 @@ function updateEntityList(entity_list) {
   });
 }
 
+//Checks what trackers are active
+function isTrackerActive(last_updated, timeoutSeconds = 30) {
+  const last = new Date(last_updated).getTime();
+  if (isNaN(last)) return false //Stops crashing if no data
+  const now = Date.now();
+  return (now - last) / 1000 <= timeoutSeconds;
+}
+
+async function fetchEntities() {
+  try {
+    const result = await fetch("/entities");
+    if (!result.ok) return;
+
+    const data = await result.json();
+    updateEntityList(data);
+  } catch (err) {
+    console.error("Failed to fetch entity data", err);
+  }
+}
+
+//Gets functions working as soon as application starts
 document.addEventListener("DOMContentLoaded", () => {
-  updateEntityList(entity_list);
   startMetricsPolling();
   fetchMetrics();
+  fetchEntities();
+  setInterval(fetchEntities, 10000);
 });
 
 //Activty Graph Functionality

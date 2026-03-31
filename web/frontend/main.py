@@ -3,6 +3,7 @@ from fastapi import Request, Depends, HTTPException
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import time
 import secrets
+from datetime import datetime, timezone
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from core.settings import settings
@@ -158,6 +159,58 @@ async def get_metrics():
 async def clear_metrics():
     metrics.clear()
     return {"message": "Metrics cleared"}
+
+#Entity status tracking
+entities = {
+    "b85e5637-4791-4aa4-abec-a2ac3e4a946e": {
+        "name": "Plymouth Venturer",
+        "last_updated": None
+    },
+    "fa7fa868-8eac-4e20-a69c-b7b7c17364bb": {
+        "name": "Plymouth Sound",
+        "last_updated": None
+    },
+    "fa0a1599-8de1-4e08-aee8-f1607e1359cb": {
+        "name": "Tamar Belle",
+        "last_updated": None
+    },
+    "add9ce40-e60c-41b4-b6e9-e7dc3185849c": {
+        "name": "Plymouth Princess",
+        "last_updated": None
+    },
+    "9e2f2cbd-2671-4972-9115-c0bd8d5cef2d": {
+        "name": "Island Princess",
+        "last_updated": None
+    },
+    "072caf2a-a921-4128-8369-75b237c42161": {
+        "name": "Edgcumbe Belle",
+        "last_updated": None
+    }
+}
+
+@app.post("/tracker/update")
+async def tracker_update(request: Request):
+    data = await request.json()
+    entity_id = data.get("id")
+
+    if entity_id not in entities:
+        raise HTTPException(status_code=404, detail="Unknown Entity")
+    
+    entities[entity_id]["last_updated"] = datetime.now(timezone.utc).isoformat()
+
+    return {"status": "ok"}
+
+#Updates the entity status once info is known
+@app.get("/entities")
+async def get_entities():
+    return [
+        {
+            "id": ent_id,
+            "name": ent["name"],
+            "last_updated": ent["last_updated"]
+        }
+        for ent_id, ent in entities.items()
+    ]
 
 #Routes
 @app.get("/")
