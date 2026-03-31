@@ -66,7 +66,38 @@
 <div id="settings_panel" class="settings_panel">
   <div class="settings_content">
     <h1>Settings</h1>
-    <button onclick="closeSettings()">Close</button>
+    <div class="settings_section">
+      <p class="settings_label">Alert Settings</p>
+      <label class="settings_toggle">
+        <input type="checkbox" id="mute_404" onchange="saveSetting('mute_404', this.checked)">
+        Mute 404 alerts
+      </label>
+      <label class="settings_toggle">
+        <input type="checkbox" id="mute_slow" onchange="saveSetting('mute_slow', this.checked)">
+        Mute slow response
+      </label>
+      <br>
+      <button class="settings_btn_clear" onclick="clearAlerts()">Clear security alerts</button>
+    </div>
+    <div class="settings_section">
+      <p class="settings_label">Activity Bar Settings</p>
+      Bar interval (seconds)
+    <label class="settings_toggle">
+      <input type="number" id="barInterval" min="2" max="60" value="3" 
+        onchange="saveSetting('barInterval', Number(this.value))">
+      <br>
+      <input type="checkbox" id="pause_bars" onchange="saveSetting('pause_bars', this.checked)">
+      Pause Activity Chart
+      </label>
+    </div>
+
+    <div class="settings_section">
+      <p class="settings_label">Export to JSON</p>
+      <button class="settings_btn" onclick="exportAlerts()">Export alerts</button>
+      <button class="settings_btn" onclick="exportMetrics()">Export metrics</button>
+    </div>
+    <br>
+    <button class="settings_btn_close" onclick="closeSettings()">Close</button>
   </div>
 </div>
 

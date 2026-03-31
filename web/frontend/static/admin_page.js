@@ -1,3 +1,17 @@
+//Settings preferences
+const adminSettings = {
+  mute_404: false,
+  mute_slow: false,
+  barInterval: 3,
+  pause_bars: false
+};
+
+function saveSetting(key, value) {
+  adminSettings[key] = value;
+  startMetricsPolling();
+}
+
+
 //Ferry data
 const entity_list = [
   {
@@ -95,16 +109,9 @@ function updateEntityList(entity_list) {
 
 document.addEventListener("DOMContentLoaded", () => {
   updateEntityList(entity_list);
+  startMetricsPolling();
+  fetchMetrics();
 });
-
-//Used for opening and closing the settings menu
-function openSettings() {
-  document.getElementById("settings_panel").style.display = "flex";
-} 
-
-function closeSettings() {
-  document.getElementById("settings_panel").style.display = "none";
-}
 
 //Activty Graph Functionality
 
@@ -193,30 +200,46 @@ function renderStats(data) {
       }
       metricsData = await res.json();
       renderStats(metricsData);
-      pushActivityBar(metricsData.length); //Used to display requests on the activity graph
+      if (!adminSettings.pause_bars) {
+        pushActivityBar(metricsData.length); //Used to display requests on the activity graph
+      }
     } catch (err) {
       console.error("Failed to fetch the metrics data", err);
     }
   }
 
-//Checks metrics every 3 seconds
-setInterval(fetchMetrics, 3000);
-fetchMetrics();
+//Allows for pausing and changing interval of metric visualisation speed
+//Also just controls activity bar in general
+let metricsInterval;
+
+function startMetricsPolling() {
+  clearInterval(metricsInterval);
+  if (!adminSettings.pause_bars) {
+    metricsInterval = setInterval(fetchMetrics, adminSettings.barInterval * 1000)
+  }
+}
 
 //Security Alerts functionality
 
 //For rendering the security alerts into the security container
 function renderingSecurityAlerts(alerts) {
   const container = document.getElementById("security_list");
+  adminSettings.alertsData = alerts;
   container.innerHTML = "";
 
-  if (alerts.length === 0) {
+  const filtered = alerts.filter(alert => {
+    if (adminSettings.mute_404 && alert.type === "404 Not Found") return false;
+    if (adminSettings.mute_slow && alert.type === "Slow Response") return false;
+    return true;
+});
+
+  if (filtered.length === 0) {
     container.innerHTML = `<li class="no_alerts">No alerts detected</li>`;
     return;
   }
 
   //Most recent alerts bumped
-  [...alerts].reverse().forEach(alert => {
+  [...filtered].reverse().forEach(alert => {
     const li = document.createElement("li");
     li.className = `security_alert severity_${alert.severity}`;
     li.innerHTML = `
@@ -249,3 +272,46 @@ async function fetchSecurityAlerts() {
 //Checks every five seconds
 setInterval(fetchSecurityAlerts, 5000);
 fetchSecurityAlerts();
+
+//Used for opening and closing the settings menu
+function openSettings() {
+  document.getElementById("settings_panel").style.display = "flex";
+  document.getElementById("mute_404").checked = adminSettings.mute_404;
+  document.getElementById("mute_slow").checked = adminSettings.mute_slow;
+  document.getElementById("barInterval").value = adminSettings.barInterval;
+} 
+function closeSettings() {
+  document.getElementById("settings_panel").style.display = "none";
+}
+
+//Clears security alerts
+async function clearAlerts() {
+  await fetch("/security/clear", { method: "POST"});
+  fetchSecurityAlerts();
+}
+
+//Clears metrics & reloads
+async function clearMetrics() {
+  await fetch("/metrics/clear", { method: "POST"});
+  fetchMetrics();
+}
+
+//Downloads alerts as JSON
+function exportAlerts() {
+  const blob = new Blob([JSON.stringify(adminSettings.alertsData, null, 2)],
+    { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "alerts.json";
+  a.click(); 
+}
+
+//Downloads metrics as JSON
+function exportMetrics() {
+  const blob = new Blob([JSON.stringify(metricsData, null, 2)],
+    { type: "application/json"  });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "metrics.json";
+  a.click(); 
+}

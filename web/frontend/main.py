@@ -75,6 +75,11 @@ def log_alert(alert_type: str, message: str, ip: str, severity: str):
 async def get_security():
     return alerts[-20:]
 
+@app.post("/security/clear")
+async def clear_security():
+    alerts.clear()
+    return {"message": "Alerts cleared"}
+
 #Used for retrieving metric data as the server runs i.e. current request
 #average latency, status codes, etc
 metrics = []
@@ -148,6 +153,11 @@ async def record_metrics(request: Request, call_next):
 @app.get("/metrics")
 async def get_metrics():
     return metrics [-50:]
+
+@app.post("/metrics/clear")
+async def clear_metrics():
+    metrics.clear()
+    return {"message": "Metrics cleared"}
 
 #Routes
 @app.get("/")
