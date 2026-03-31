@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     MIGRATOR_PASSWORD: str = "alembic_password"
 
     REDIS_HOST: str = "redis"
+    REDIS_PORT: int = 6379
 
     @computed_field
     @property

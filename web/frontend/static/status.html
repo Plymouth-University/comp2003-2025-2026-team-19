@@ -1,16 +1,20 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Stonehouse to Cremyll Mount Edgcumbe Ferry</title>
-  <meta name="description" content="Live tracking for the Stonehouse to Cremyll Mount Edgcumbe Ferry." />
+  <title>Plymouth Ferry Tracker</title>
+  <meta name="description" content="Live tracking for Plymouth ferries." />
 
   <!-- MapLibre CSS -->
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.5.0/dist/maplibre-gl.css" />
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=fit_screen,zoom_in,zoom_out" />
 
   <link rel="stylesheet" href="/static/status.css" />
 </head>
+
 <body>
   <div id="app">
     <div id="map" role="application" aria-label="Ferry route map"></div>
@@ -20,7 +24,7 @@
       <div class="brand">
         <div class="brand-icon" aria-hidden="true">⛴️</div>
         <div>
-          <div class="brand-title">Stonehouse ↔ Cremyll Ferry</div>
+          <div class="brand-title">Plymouth Ferry Tracker</div>
           <div class="brand-sub"></div>
         </div>
       </div>
@@ -42,7 +46,8 @@
         </div>
 
         <!-- Status -->
-        <div id="statusText" class="status-text">Status: —</div>
+        <div id="status">Status: <span id="statusText">Disconnected</span> • Last update: <span
+            id="statusTimestamp">--:--</span></div>
       </div>
     </header>
 
@@ -76,18 +81,18 @@
     </aside>
 
     <!-- Legend -->
-    <div class="legend" aria-label="Vessel status legend">
+    <!-- <div class="legend" aria-label="Vessel status legend">
       <div class="legend-title">Vessel Status</div>
       <div class="legend-row"><span class="dot dot-green"></span><span>In Transit</span></div>
       <div class="legend-row"><span class="dot dot-amber"></span><span>Docked</span></div>
       <div class="legend-row"><span class="dot dot-red"></span><span>Delayed</span></div>
-    </div>
+    </div> -->
 
     <!-- Map controls -->
     <div class="map-controls" aria-label="Map controls">
-      <button class="ctrl-btn" id="btnZoomIn" title="Zoom in" aria-label="Zoom in">＋</button>
-      <button class="ctrl-btn" id="btnZoomOut" title="Zoom out" aria-label="Zoom out">－</button>
-      <button class="ctrl-btn" id="btnRecenter" title="Recenter" aria-label="Recenter">◎</button>
+      <button class="ctrl-btn" id="btnZoomIn" title="Zoom in" aria-label="Zoom in"><span class="material-symbols-outlined">zoom_in</span></button>
+      <button class="ctrl-btn" id="btnZoomOut" title="Zoom out" aria-label="Zoom out"><span class="material-symbols-outlined">zoom_out</span></button>
+      <button class="ctrl-btn" id="btnFit" title="Fit to screen" aria-label="Fit to screen"><span class="material-symbols-outlined">fit_screen</span></button>
     </div>
   </div>
 
@@ -97,4 +102,5 @@
   <script src="/static/status.js"></script>
 
 </body>
+
 </html>
