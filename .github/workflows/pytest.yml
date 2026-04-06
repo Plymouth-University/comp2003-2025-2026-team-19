@@ -1,0 +1,45 @@
+name: pytest
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgis:
+        image: postgis/postgis:15-3.3
+        env:
+          POSTGRES_USER: ft_admin
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: ferrytracker
+        ports:
+          - 5432:5432
+        # Health check to ensure DB is up before tests start
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14.0'
+          cache: 'poetry' # cache virtualenv for faster runs
+
+      - name: Install dependencies
+        run: poetry install --with dev
+
+      - name: Run Tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://ft_admin:password@localhost:5432/ferrytracker
+        run: |
+          python -m pytest -v

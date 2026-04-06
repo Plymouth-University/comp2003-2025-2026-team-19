@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import URL, create_engine
@@ -12,8 +14,27 @@ from web.api.src.main import app
 # Set up postgis container (persistent across tests)
 @pytest.fixture(scope="session")
 def postgis_container():
-    with PostgresContainer("postgis/postgis:18-3.6-alpine") as postgres:
-        yield postgres
+    if os.getenv("GITHUB_ACTIONS") == "true":
+
+        class MockContainer:
+            username = "ft_admin"
+            password = "password"
+            dbname = "ferrytracker"
+            port = 5432
+
+            def get_container_host_ip(self):
+                return "localhost"
+
+            def get_exposed_port(self, port):
+                return 5432
+
+            def get_connection_url(self):
+                return f"postgresql://{self.username}:{self.password}@{self.get_container_host_ip()}:{self.get_exposed_port(self.port)}/{self.dbname}"
+
+        yield MockContainer()
+    else:
+        with PostgresContainer("postgis/postgis:18-3.6-alpine") as postgres:
+            yield postgres
 
 
 @pytest.fixture(scope="session", autouse=True)
