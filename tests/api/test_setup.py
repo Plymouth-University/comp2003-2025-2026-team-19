@@ -12,7 +12,6 @@ def test_database_connection(db_session):
 
 def test_api_reaches_test_db(client):
     """Verify that the API is using the test override, not production."""
-    # Assuming you have a health check or a simple route
     response = client.get("/health")
     assert response.status_code == 200
 
