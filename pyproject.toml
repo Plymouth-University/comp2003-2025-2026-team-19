@@ -37,4 +37,6 @@ dev = [
     "pytest (>=9.0.2,<10.0.0)",
     "alembic (>=1.18.4,<2.0.0)",
     "psycopg2 (>=2.9.11,<3.0.0)",
+    "testcontainers[postgresql] (>=4.14.2,<5.0.0)",
+    "psycopg2-binary (>=2.9.11,<3.0.0)",
 ]
