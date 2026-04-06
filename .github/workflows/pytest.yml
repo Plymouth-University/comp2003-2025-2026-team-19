@@ -42,4 +42,4 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://ft_admin:password@localhost:5432/ferrytracker
         run: |
-          python -m pytest -v
+          poetry run pytest
