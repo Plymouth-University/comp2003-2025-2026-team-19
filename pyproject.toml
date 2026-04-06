@@ -40,3 +40,11 @@ dev = [
     "testcontainers[postgresql] (>=4.14.2,<5.0.0)",
     "psycopg2-binary (>=2.9.11,<3.0.0)",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:sentry_sdk.*",
+    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:starlette.*"
+]
