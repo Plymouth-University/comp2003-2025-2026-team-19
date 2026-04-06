@@ -25,12 +25,19 @@ def setup_db(postgis_container):
     Base.metadata.drop_all(engine)
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def db_session(postgis_container):
-    engine = create_engine(postgis_container.get_connection_url())
-    Session = sessionmaker(bind=engine)
-    with Session() as session:
+    engine = create_engine(postgis_container.get_connection_url(), pool_pre_ping=True)
+
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    session = SessionLocal()
+
+    try:
         yield session
+    finally:
+        session.close()
+        engine.dispose()
 
 
 @pytest.fixture
