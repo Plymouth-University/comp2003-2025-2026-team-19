@@ -1,5 +1,9 @@
+import logging
+
 import pytest
 from sqlalchemy import text
+
+logger = logging.getLogger(__name__)
 
 
 def test_database_connection(db_session):
@@ -7,7 +11,7 @@ def test_database_connection(db_session):
     result = db_session.execute(text("SELECT postgis_full_version();"))
     version = result.scalar()
     assert "POSTGIS" in version
-    print(f"\n[CONFTEST CHECK] PostGIS Version: {version}")
+    logger.info(f"[CONFTEST CHECK] PostGIS Version: {version}")
 
 
 def test_api_reaches_test_db(client):
