@@ -23,6 +23,7 @@ app.mount("/static", static, name="static")
 #Log in authentication
 security = HTTPBasic()
 
+<<<<<<< HEAD
 #Checks presented log-in details
 def require_admin(credentials: HTTPBasicCredentials = Depends(security)):
     valid_user = secrets.compare_digest(credentials.username, settings.ADMIN_USER)
@@ -213,21 +214,12 @@ async def get_entities():
     ]
 
 #Routes
+=======
+@app.get("/status")
+>>>>>>> origin/main
 @app.get("/")
-async def get_root():
-    """Returns a welcome message or the index page.
-    Returns:
-        dict: A welcome message.
-    """
-    return {"message": "Welcome to the ferrytracker Web Backend!"}
-
-    # TODO: Return index.html template
-    # return templates.TemplateResponse("index.html", {"request": request})
-
-
-@app.get("/status/{entity_id}")
 async def get_status(
-    request: fastapi.Request, entity_id: str
+    request: fastapi.Request, entity_id: str | None = None
 ) -> fastapi.responses.HTMLResponse:
     """Returns the status page for a given entity_id.
     Args:
