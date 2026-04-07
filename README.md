@@ -10,13 +10,13 @@
     ```
     $ git clone https://github.com/Plymouth-University/comp2003-2025-2026-team-19
     ```
-2. Launch containers and watch for changes
+2. Copy `.env.example` to `.env` and set passwords
+3. Launch containers and watch for changes
     ```
     $ docker compose up --build --watch
     ```
-3. Access the server at http://127.0.0.1:20003
-4. Make changes, containers will sync/rebuild where necessary
-
+4. Access the server at http://127.0.0.1:20003
+5. Make changes, containers will sync/rebuild where necessary
 
 ---
 <details>

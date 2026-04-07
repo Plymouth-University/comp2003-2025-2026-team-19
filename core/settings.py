@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     ADMIN_PASSWORD: str
 
     REDIS_HOST: str = "redis"
+    REDIS_PORT: int = 6379
 
     @computed_field
     @property
@@ -39,7 +40,7 @@ class Settings(BaseSettings):
     def MIGRATION_DATABASE_URL(self) -> str:
         return (
             f"postgresql://{self.MIGRATION_DB_USER}:"
-            f"{self.MIGRATOR_PASSWORD}@localhost:"
+            f"{self.MIGRATOR_PASSWORD}@{self.DATABASE_HOST}:"
             f"{self.DATABASE_PORT}/{self.DATABASE_NAME}"
         )
 

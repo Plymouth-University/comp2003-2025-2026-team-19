@@ -1,13 +1,16 @@
+import logging
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy import desc, func, select
+from sqlalchemy.orm import aliased, selectinload
 
 from core.database import AsyncSession
-from core.models import Entity, EntityOnRoute
+from core.models import Entity, EntityOnRoute, GPSTelemetry, Location, Route
 
 from .exceptions import EntityNotFoundError
 from .schema.entity import ReadEntity
+
+logger = logging.getLogger("uvicorn")
 
 
 async def get_entity_by_uuid(db: AsyncSession, entity_id: UUID) -> ReadEntity:
@@ -36,3 +39,66 @@ async def list_entities(db: AsyncSession) -> list[ReadEntity]:
     result = await db.execute(stmt)
     entities = result.scalars().all()
     return [ReadEntity.model_validate(entity) for entity in entities]
+
+
+async def get_entities_info(
+    db: AsyncSession, entity_uuids: list[str]
+) -> dict[str, dict]:
+    StartLoc = aliased(Location)
+    EndLoc = aliased(Location)
+
+    if entity_uuids == "all":
+        entity_uuids = list(
+            map(str, (await db.execute(select(Entity.uuid))).scalars().all())
+        )
+
+        logger.info(f"Subscribing to all entities: {entity_uuids}")
+
+    stmt = (
+        select(
+            Entity,
+            GPSTelemetry,
+            Route.uuid.label("route_uuid"),
+            StartLoc.name.label("origin"),
+            EndLoc.name.label("destination"),
+            func.ST_X(GPSTelemetry.geom).label("lng"),
+            func.ST_Y(GPSTelemetry.geom).label("lat"),
+        )
+        .distinct(Entity.id)
+        .outerjoin(GPSTelemetry, Entity.id == GPSTelemetry.entity_id)
+        .outerjoin(EntityOnRoute, EntityOnRoute.entity_id == Entity.id)
+        .outerjoin(Route, Route.id == EntityOnRoute.route_id)
+        .outerjoin(StartLoc, StartLoc.id == Route.start_location_id)
+        .outerjoin(EndLoc, EndLoc.id == Route.end_location_id)
+        .where(Entity.uuid.in_(entity_uuids))
+        .order_by(Entity.id, desc(GPSTelemetry.timestamp))
+    )
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    return {
+        str(row.Entity.uuid): {
+            "name": row.Entity.name,
+            "route": {
+                "uuid": str(row.route_uuid) if row.route_uuid else None,
+                "origin": row.origin,
+                "destination": row.destination,
+            },
+            # Handle None values for entities without telemetry
+            "last_location": (
+                {
+                    "lat": row.lat,
+                    "lng": row.lng,
+                    "ts": (
+                        row.GPSTelemetry.timestamp.isoformat()
+                        if row.GPSTelemetry
+                        else None
+                    ),
+                }
+                if row.GPSTelemetry
+                else None
+            ),
+        }
+        for row in rows
+    }
