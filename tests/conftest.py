@@ -1,6 +1,7 @@
 import os
 
 import pytest
+import sentry_sdk
 from fastapi.testclient import TestClient
 from sqlalchemy import URL, create_engine
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -35,6 +36,13 @@ def postgis_container():
     else:
         with PostgresContainer("postgis/postgis:18-3.6-alpine") as postgres:
             yield postgres
+
+
+@pytest.fixture(scope="session", autouse=True)
+def disable_sentry():
+    """Ensure Sentry is disabled for the duration of the test suite."""
+
+    sentry_sdk.init(dsn="")
 
 
 @pytest.fixture(scope="session", autouse=True)
