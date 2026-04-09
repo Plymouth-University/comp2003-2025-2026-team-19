@@ -14,3 +14,12 @@ def test_get_entity_by_uuid(db_session, client: TestClient):
     data = response.json()
     assert data["uuid"] == str(test_entity.uuid)
     assert data["name"] == test_entity.name
+
+
+def test_get_entity_by_uuid_not_found(client: TestClient):
+    # Test fetching an entity with a non-existent UUID
+    response = client.get("/entities/00000000-0000-0000-0000-000000000000")
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Entity not found"
