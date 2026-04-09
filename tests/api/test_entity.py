@@ -1,5 +1,7 @@
 from fastapi.testclient import TestClient
 
+from core import database, models
+from tests import conftest
 from tests.utils import create_test_entity
 
 
@@ -23,3 +25,12 @@ def test_get_entity_by_uuid_not_found(client: TestClient):
     assert response.status_code == 404
     data = response.json()
     assert data["detail"] == "Entity not found"
+
+
+def test_get_entity_by_uuid_invalid_uuid(client: TestClient):
+    # Test fetching an entity with an invalid UUID format
+    response = client.get("/entities/invalid-uuid")
+
+    assert response.status_code == 422
+    data = response.json()
+    assert "value is not a valid uuid" in data["detail"][0]["msg"]
