@@ -92,6 +92,12 @@
     </div>
 
     <div class="settings_section">
+      <p class="settings_label">Test Websocket</p>
+      <button class="settings_test_websocket" onclick="testWebsocket()">Test Websocket</button>
+      <span id="ws_status">Not tested</span>
+    </div>
+
+    <div class="settings_section">
       <p class="settings_label">Export to JSON</p>
       <button class="settings_btn" onclick="exportAlerts()">Export alerts</button>
       <button class="settings_btn" onclick="exportMetrics()">Export metrics</button>

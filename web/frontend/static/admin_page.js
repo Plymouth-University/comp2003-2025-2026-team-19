@@ -53,7 +53,7 @@ const entity_list = [
     "name": "Edgcumbe Belle",
     "route": null,
     "active": false,
-    "last_update": null
+    "last_updated": null
   }
 ]
 
@@ -132,7 +132,7 @@ document.addEventListener("DOMContentLoaded", () => {
   startMetricsPolling();
   fetchMetrics();
   fetchEntities();
-  setInterval(fetchEntities, 10000);
+  websocketConnection();
 });
 
 //Activty Graph Functionality
@@ -336,4 +336,77 @@ function exportMetrics() {
   a.href = URL.createObjectURL(blob);
   a.download = "metrics.json";
   a.click(); 
+}
+
+//Fun websocket stuff
+let ws;
+
+function websocketConnection() {
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${protocol}://${window.location.host}/entities/ws`);
+
+  ws.onopen = () => {
+    console.log("WebSocket Connected!");
+
+    const ids = entity_list.map(e => e.id);
+
+    ws.send(JSON.stringify({
+      action: "subscribe",
+      entity_ids: ids
+    }));
+  };
+
+  ws.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+
+    if(message.type === "update") {
+      handleEntityUpdate(message.data);
+    }
+
+    if (message.status === "subscribed") {
+      console.log("Subscribed:", message.entities);
+    }
+
+    if (message.type === "pong") {
+      const statusEl = document.getElementById("ws_status");
+      statusEl.textContent = "Working";
+      statusEl.style.color = "green";
+    }
+  };
+
+  ws.onclose = () => {
+    console.warn("Websocket close. Reconnecting...");
+    setTimeout(websocketConnection, 3000);
+  }
+
+  ws.onerror = (err) => {
+    console.error("Websocket error", err);
+  };
+}
+
+//For websocket connection updates
+function handleEntityUpdate(update) {
+  const entity = entity_list.find(e => e.id === update.entity_id);
+
+  if (!entity) return;
+
+  entity.last_updated = update.timestamp || new Date().toISOString();
+
+  updateEntityList(entity_list);
+}
+
+//Used for websocket test button
+function testWebsocket() {
+  const statusEl = document.getElementById("ws_status");
+
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    statusEl.textContent = "Not connected :(";
+    statusEl.style.color = "red";
+    return;
+  }
+
+  //Pending state
+  statusEl.textContent = "Pinging...";
+  statusEl.style.color = "orange";
+  ws.send(JSON.stringify({ action: "ping" }));
 }

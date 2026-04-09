@@ -196,7 +196,8 @@ async def tracker_update(request: Request):
     if entity_id not in entities:
         raise HTTPException(status_code=404, detail="Unknown Entity")
     
-    entities[entity_id]["last_updated"] = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(timezone.utc).isoformat()
+    entities[entity_id]["last_updated"] = timestamp
 
     return {"status": "ok"}
 
