@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from core import database, models
 from tests import conftest
@@ -34,3 +35,32 @@ def test_get_entity_by_uuid_invalid_uuid(client: TestClient):
     assert response.status_code == 422
     data = response.json()
     assert "value is not a valid uuid" in data["detail"][0]["msg"]
+
+
+def test_list_entities(db_session, client: TestClient):
+    # Create multiple test entities
+    create_test_entity(db_session, name="Entity 1")
+    create_test_entity(db_session, name="Entity 2")
+
+    # Test listing all entities
+    response = client.get("/entities")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) >= 2  # At least the two we just created
+    assert any(entity["name"] == "Entity 1" for entity in data)
+    assert any(entity["name"] == "Entity 2" for entity in data)
+
+
+def test_list_entities_empty(db_session: Session, client: TestClient):
+    # Ensure the database is empty
+    db_session.query(models.Entity).delete()
+    db_session.commit()
+
+    # Test listing entities when there are none
+    response = client.get("/entities")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 0
