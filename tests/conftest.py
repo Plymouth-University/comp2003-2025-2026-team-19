@@ -3,13 +3,36 @@ import os
 import pytest
 import sentry_sdk
 from fastapi.testclient import TestClient
+from httpx import AsyncClient
+from httpx_ws.transport import ASGIWebSocketTransport
 from sqlalchemy import URL, create_engine
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from testcontainers.postgres import PostgresContainer
+from testcontainers.redis import RedisContainer
 
 from core.database import Base, get_db_session
+from core.settings import settings
 from web.api.src.main import app
+
+
+@pytest.fixture(scope="session")
+def redis_container():
+    with RedisContainer("redis:8.6-alpine") as container:
+        yield container
+
+
+@pytest.fixture(autouse=True)
+def override_redis_connection(redis_container, monkeypatch):
+    """
+    Force settings to use the testcontainer ports.
+    Using 'autouse=True' ensures this happens for every test.
+    """
+    test_host = redis_container.get_container_host_ip()
+    test_port = redis_container.get_exposed_port(6379)
+
+    monkeypatch.setattr(settings, "REDIS_HOST", test_host)
+    monkeypatch.setenv("REDIS_HOST", test_host)
 
 
 # Set up postgis container (persistent across tests)
@@ -70,7 +93,34 @@ def db_session(postgis_container):
 
 
 @pytest.fixture
-def client(postgis_container):
+async def async_client(postgis_container, override_redis_connection):
+    async_url = URL.create(
+        drivername="postgresql+asyncpg",
+        username=postgis_container.username,
+        password=postgis_container.password,
+        host=postgis_container.get_container_host_ip(),
+        port=postgis_container.get_exposed_port(postgis_container.port),
+        database=postgis_container.dbname,
+    )
+    async_engine_test = create_async_engine(async_url)
+    AsyncSessionLocal = async_sessionmaker(async_engine_test, expire_on_commit=False)
+
+    async def override_get_db():
+        async with AsyncSessionLocal() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_get_db
+
+    async with AsyncClient(
+        transport=ASGIWebSocketTransport(app=app), base_url="http://test"
+    ) as ac:
+        yield ac
+
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client(postgis_container, override_redis_connection):
     """
     Async client for FastAPI.
     Overwrites the production async engine with one pointing to the container.
