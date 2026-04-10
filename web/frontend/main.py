@@ -1,13 +1,37 @@
+import logging
+import os
+
 import fastapi
+import sentry_sdk
+from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from core.logging import EndpointFilter
+from core.settings import settings
+
+load_dotenv()
+
 templates = Jinja2Templates(directory="static/")
 static = StaticFiles(directory="static/")
+
+sentry_sdk.init(
+    dsn=settings.SENTRY_DSN_FRONTEND_SERVER,
+    environment=settings.ENVIRONMENT,
+    send_default_pii=True,
+    enable_logs=False,
+    traces_sample_rate=1.0,
+    profile_session_sample_rate=1.0,
+    profile_lifecycle="trace",
+)
+
+logging.getLogger("uvicorn.access").addFilter(
+    EndpointFilter(exclude_endpoints=["/health"])
+)
+
 app = fastapi.FastAPI(
-    title="ferrytracker Web Backend",
-    description="Backend API for ferrytracker web application, \
-serving html pages and static assets.",
+    title="ferrytracker Web Frontend",
+    description="Frontend for ferrytracker web application, serving html pages and static assets.",
     version="0.1.0",
     docs_url=None,
 )
@@ -31,7 +55,13 @@ async def get_status(
     # TODO: Check if entity_id exists and fetch its status
 
     return templates.TemplateResponse(
-        "status.html", {"request": request, "entity_id": entity_id}
+        "status.html",
+        {
+            "request": request,
+            "entity_id": entity_id,
+            "env": settings.ENVIRONMENT,
+            "sentry_script_url": settings.SENTRY_SCRIPT_URL,
+        },
     )
 
 
