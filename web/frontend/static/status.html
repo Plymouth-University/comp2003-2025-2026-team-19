@@ -13,6 +13,22 @@
     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=fit_screen,zoom_in,zoom_out" />
 
   <link rel="stylesheet" href="/static/status.css" />
+
+  <script>
+      window.sentryOnLoad = function () {
+        Sentry.init({
+          tracesSampleRate: "{{ env }}" === "prod" ? 0.1 : 1.0,
+          replaysSessionSampleRate: 0.1,
+          replaysOnErrorSampleRate: 1.0,
+          environment: "{{ env }}",
+        });
+      };
+    </script>
+
+    <script
+      src="{{ sentry_script_url }}"
+      crossorigin="anonymous"
+    ></script>
 </head>
 
 <body>
