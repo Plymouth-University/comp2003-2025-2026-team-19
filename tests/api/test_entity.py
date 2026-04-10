@@ -1,8 +1,7 @@
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from core import database, models
-from tests import conftest
+from core import models
 from tests.utils import create_test_entity
 
 
