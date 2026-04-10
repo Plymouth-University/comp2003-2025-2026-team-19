@@ -188,7 +188,7 @@ entities = {
     }
 }
 
-@app.post("/tracker/update")
+@app.post("/entities/update")
 async def tracker_update(request: Request):
     data = await request.json()
     entity_id = data.get("id")

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import Base, engine, get_db_session
 
-from .routes import entity_router, health_router, websocket_router
+from .routes import entity_router, health_router, websocket_router, websocketstrack_router
 from .routes.websockets import redis_listener
 
 load_dotenv()
@@ -45,4 +45,5 @@ app = FastAPI(lifespan=lifespan, root_path="/api/v1")
 
 app.include_router(health_router)
 app.include_router(websocket_router)
+app.include_router(websocketstrack_router)
 app.include_router(entity_router)

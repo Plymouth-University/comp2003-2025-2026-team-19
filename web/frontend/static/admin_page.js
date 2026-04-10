@@ -343,7 +343,7 @@ let ws;
 
 function websocketConnection() {
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-  ws = new WebSocket(`${protocol}://${window.location.host}/entities/ws`);
+  ws = new WebSocket(`${protocol}://${window.location.host}/tracker/ws`);
 
   ws.onopen = () => {
     console.log("WebSocket Connected!");
