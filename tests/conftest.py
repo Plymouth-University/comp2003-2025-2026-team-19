@@ -18,8 +18,19 @@ from web.api.src.main import app
 
 @pytest.fixture(scope="session")
 def redis_container():
-    with RedisContainer("redis:8.6-alpine") as container:
-        yield container
+    if os.getenv("GITHUB_ACTIONS") == "true":
+
+        class MockContainer:
+            def get_container_host_ip(self):
+                return "localhost"
+
+            def get_exposed_port(self, port):
+                return 6379
+
+        yield MockContainer()
+    else:
+        with RedisContainer("redis:8.6-alpine") as container:
+            yield container
 
 
 @pytest.fixture(autouse=True)
