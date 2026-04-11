@@ -117,7 +117,7 @@ function isTrackerActive(last_updated, timeoutSeconds = 30) {
 
 async function fetchEntities() {
   try {
-    const result = await fetch("/entities/ws");
+    const result = await fetch("/api/v1/entities/ws");
     if (!result.ok) return;
 
     const data = await result.json();
@@ -343,7 +343,7 @@ function exportMetrics() {
 let ws;
 
 function websocketConnection() {
-  ws = new WebSocket(`entities/ws`);
+  ws = new WebSocket(`/api/v1/entities/ws`);
 
   ws.onopen = () => {
     console.log("WebSocket Connected!");

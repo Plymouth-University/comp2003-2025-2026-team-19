@@ -193,7 +193,7 @@ entities = {
 }
 
 #Updates the entity status once info is known
-@app.get("/entities/ws")
+@app.get("/api/v1/entities/ws")
 async def get_entities(db=Depends(get_db_session)):
     subq = (
         select(
