@@ -1,142 +1,191 @@
-import asyncio
-from math import e
+import uuid
+from contextlib import asynccontextmanager
 
-import anyio
 import pytest
-from fastapi import WebSocketDisconnect
-from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from httpx_ws import WebSocketDisconnect, aconnect_ws
 from httpx_ws.transport import ASGIWebSocketTransport
 
-from core import models
 from tests.utils import create_test_entity
 from web.api.src.main import app
 
 
-def test_websocket_subscription(db_session, client: TestClient):
-    entity = create_test_entity(db_session)
-
-    with client.websocket_connect("/entities/ws") as websocket:
-        websocket.send_json({"action": "subscribe", "entity_ids": [str(entity.uuid)]})
-
-        msg = websocket.receive_json()
-        assert msg["status"] == "subscribed"
-        assert str(entity.uuid) in msg["entities"]
-        assert msg["entities"][str(entity.uuid)]["name"] == entity.name
+@asynccontextmanager
+async def ws_client():
+    """
+    Async HTTP client with WebSocket support.
+    """
+    transport = ASGIWebSocketTransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
 
 
-def test_websocket_subscription_invalid_entity(db_session, client: TestClient):
-    create_test_entity(db_session)
-    with client.websocket_connect("/entities/ws") as websocket:
-        websocket.send_json(
-            {
-                "action": "subscribe",
-                "entity_ids": ["00000000-0000-0000-0000-000000000000"],
-            }
-        )
+async def assert_disconnects_with(
+    payload, code: int, reason_contains: str | None = None
+):
+    """Assert that sending *payload* causes the server to close with *code*."""
+    with pytest.raises(ExceptionGroup) as exc_info:
+        async with ws_client() as client:
+            async with aconnect_ws("/entities/ws", client) as ws:
+                if isinstance(payload, str):
+                    await ws.send_text(payload)
+                else:
+                    await ws.send_json(payload)
+                await ws.receive_json(timeout=5)
 
-        msg = websocket.receive_json()
-        assert msg["status"] == "subscribed"
-        assert "00000000-0000-0000-0000-000000000000" not in msg["entities"]
+    # Unwrap nested ExceptionGroups (httpx_ws raises from an internal task group)
+    exc = exc_info.value.exceptions[0]
+    while isinstance(exc, ExceptionGroup):
+        exc = exc.exceptions[0]
 
-
-def test_websocket_subscription_all(db_session, client: TestClient):
-    entity_ids = [
-        create_test_entity(db_session, f"Test entity {n}").uuid for n in range(2)
-    ]
-    with client.websocket_connect("/entities/ws") as websocket:
-        websocket.send_json({"action": "subscribe", "entity_ids": "all"})
-
-        msg = websocket.receive_json()
-
-        assert len(msg["entities"]) == len(entity_ids)
-        assert set(map(str, entity_ids)).intersection(
-            set(map(str, msg["entities"]))
-        ) == set(map(str, entity_ids))
+    assert isinstance(exc, WebSocketDisconnect)
+    assert exc.code == code, f"Expected close code {code}, got {exc.code}"
+    if reason_contains is not None:
+        assert (
+            reason_contains in exc.reason
+        ), f"Expected '{reason_contains}' in reason, got: {exc.reason!r}"
 
 
 @pytest.mark.anyio
-async def test_websocket_subscription_no_entity_ids(db_override):
-    transport = ASGIWebSocketTransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        async with aconnect_ws("/entities/ws", client) as websocket:
-            await websocket.send_json({"action": "subscribe"})
-            msg = await websocket.receive_json(timeout=5)
-            assert msg["status"] == "subscribed"
-            assert msg["entities"] == {}
+async def test_subscribe_single_entity(db_session, db_override):
+    entity = create_test_entity(db_session)
+
+    async with ws_client() as client:
+        async with aconnect_ws("/entities/ws", client) as ws:
+            await ws.send_json(
+                {"action": "subscribe", "entity_ids": [str(entity.uuid)]}
+            )
+            msg = await ws.receive_json(timeout=5)
+
+    assert msg["status"] == "subscribed"
+    assert str(entity.uuid) in msg["entities"]
+    assert msg["entities"][str(entity.uuid)]["name"] == entity.name
 
 
 @pytest.mark.anyio
-async def test_websocket_subscription_mixed_uuids(db_session, db_override):
+async def test_subscribe_all_entities(db_session, db_override):
+    entity_ids = {
+        str(create_test_entity(db_session, f"Test entity {n}").uuid) for n in range(3)
+    }
+
+    async with ws_client() as client:
+        async with aconnect_ws("/entities/ws", client) as ws:
+            await ws.send_json({"action": "subscribe", "entity_ids": "all"})
+            msg = await ws.receive_json(timeout=5)
+
+    # Exact match — no extra or missing entities
+    assert set(msg["entities"].keys()) == entity_ids
+
+
+@pytest.mark.anyio
+async def test_subscribe_no_entity_ids_defaults_to_empty(db_override):
+    async with ws_client() as client:
+        async with aconnect_ws("/entities/ws", client) as ws:
+            await ws.send_json({"action": "subscribe"})
+            msg = await ws.receive_json(timeout=5)
+
+    assert msg["status"] == "subscribed"
+    assert msg["entities"] == {}
+
+
+@pytest.mark.anyio
+async def test_subscribe_idempotent(db_session, db_override):
+    """Subscribing to the same entity twice should not duplicate it."""
     entity = create_test_entity(db_session)
-    transport = ASGIWebSocketTransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        async with aconnect_ws("/entities/ws", client) as websocket:
-            await websocket.send_json(
+    entity_id = str(entity.uuid)
+
+    async with ws_client() as client:
+        async with aconnect_ws("/entities/ws", client) as ws:
+            for _ in range(2):
+                await ws.send_json({"action": "subscribe", "entity_ids": [entity_id]})
+                msg = await ws.receive_json(timeout=5)
+
+    assert list(msg["entities"].keys()).count(entity_id) == 1
+
+
+@pytest.mark.anyio
+async def test_subscribe_mixed_valid_and_invalid_uuids(db_session, db_override):
+    """Valid UUIDs are subscribed; malformed values are silently ignored."""
+    entity = create_test_entity(db_session)
+
+    async with ws_client() as client:
+        async with aconnect_ws("/entities/ws", client) as ws:
+            await ws.send_json(
                 {
                     "action": "subscribe",
                     "entity_ids": [str(entity.uuid), "not-a-uuid", 12345],
                 }
             )
-            msg = await websocket.receive_json()
-            # Valid uuid works, others are ignored
-            assert str(entity.uuid) in msg["entities"]
-            assert len(msg["entities"]) == 1
+            msg = await ws.receive_json(timeout=5)
+
+    assert str(entity.uuid) in msg["entities"]
+    assert len(msg["entities"]) == 1
 
 
 @pytest.mark.anyio
-async def test_websocket_subscription_invalid_action(db_override):
-    transport = ASGIWebSocketTransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        try:
-            async with aconnect_ws("/entities/ws", client) as websocket:
-                await websocket.send_json({"action": "invalid"})
-                await websocket.receive_json(timeout=5)
-        except* WebSocketDisconnect as eg:
-            assert eg.exceptions[0].code == 1008  # type: ignore
-        else:
-            pytest.fail("Expected WebSocketDisconnect")
+async def test_subscribe_nonexistent_entity_excluded(db_override):
+    """A well-formed UUID that doesn't match any entity is omitted from the response."""
+    missing_id = str(uuid.uuid4())
+
+    async with ws_client() as client:
+        async with aconnect_ws("/entities/ws", client) as ws:
+            await ws.send_json({"action": "subscribe", "entity_ids": [missing_id]})
+            msg = await ws.receive_json(timeout=5)
+
+    assert missing_id not in msg["entities"]
 
 
 @pytest.mark.anyio
-async def test_websocket_subscription_malformed_message(db_override):
-    transport = ASGIWebSocketTransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        try:
-            async with aconnect_ws("/entities/ws", client) as websocket:
-                await websocket.send_text("This is not a valid JSON message")
-                await websocket.receive_json(timeout=5)
-        except* WebSocketDisconnect as eg:
-            assert eg.exceptions[0].code in [1003, 1007]  # type: ignore
-            assert "Invalid JSON" in eg.exceptions[0].reason  # type: ignore
-        else:
-            pytest.fail("Expected WebSocketDisconnect")
+async def test_multiple_sequential_subscriptions(db_session, db_override):
+    """A single connection can subscribe to multiple entities in separate messages."""
+    entity_a = create_test_entity(db_session, "Entity A")
+    entity_b = create_test_entity(db_session, "Entity B")
+
+    async with ws_client() as client:
+        async with aconnect_ws("/entities/ws", client) as ws:
+            await ws.send_json(
+                {"action": "subscribe", "entity_ids": [str(entity_a.uuid)]}
+            )
+            msg_a = await ws.receive_json(timeout=5)
+
+            await ws.send_json(
+                {"action": "subscribe", "entity_ids": [str(entity_b.uuid)]}
+            )
+            msg_b = await ws.receive_json(timeout=5)
+
+    assert str(entity_a.uuid) in msg_a["entities"]
+    assert str(entity_b.uuid) in msg_b["entities"]
 
 
 @pytest.mark.anyio
-async def test_websocket_subscription_missing_action(db_override):
-    transport = ASGIWebSocketTransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        try:
-            async with aconnect_ws("/entities/ws", client) as websocket:
-                await websocket.send_json({"entity_ids": ["some-entity-id"]})
-                await websocket.receive_json(timeout=5)
-        except* WebSocketDisconnect as eg:
-            assert eg.exceptions[0].code == 1007  # type: ignore
-        else:
-            pytest.fail("Expected WebSocketDisconnect")
+async def test_invalid_action_closes_with_1008(db_override):
+    await assert_disconnects_with(
+        {"action": "invalid"},
+        code=1008,
+    )
 
 
 @pytest.mark.anyio
-async def test_websocket_subscription_invalid_entity_format(db_override):
-    transport = ASGIWebSocketTransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        try:
-            async with aconnect_ws("/entities/ws", client) as websocket:
-                await websocket.send_json({"action": "subscribe", "entity_ids": 12345})
-                await websocket.receive_json(timeout=5)
-        except* WebSocketDisconnect as eg:
-            assert eg.exceptions[0].code == 1008  # type: ignore
-        else:
-            pytest.fail("Expected WebSocketDisconnect")
+async def test_malformed_json_closes_with_1003_or_1007(db_override):
+    await assert_disconnects_with(
+        "This is not valid JSON",  # sent as raw text
+        code=1007,
+        reason_contains="Invalid JSON",
+    )
+
+
+@pytest.mark.anyio
+async def test_missing_action_field_closes_with_1007(db_override):
+    await assert_disconnects_with(
+        {"entity_ids": ["some-entity-id"]},
+        code=1007,
+    )
+
+
+@pytest.mark.anyio
+async def test_entity_ids_wrong_type_closes_with_1008(db_override):
+    """entity_ids must be a list or 'all', not a bare integer."""
+    await assert_disconnects_with(
+        {"action": "subscribe", "entity_ids": 12345},
+        code=1008,
+    )
