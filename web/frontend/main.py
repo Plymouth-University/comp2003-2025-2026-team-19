@@ -1,12 +1,16 @@
 import fastapi
 from fastapi import Request, Depends, HTTPException
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from sqlalchemy import select, func
+from core.database import get_db_session
+from core.models import Entity, GPSTelemetry
 import time
 import secrets
 from datetime import datetime, timezone
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from core.settings import settings
+
 
 templates = Jinja2Templates(directory="static/")
 static = StaticFiles(directory="static/")
@@ -188,29 +192,30 @@ entities = {
     }
 }
 
-@app.post("/entities/update")
-async def tracker_update(request: Request):
-    data = await request.json()
-    entity_id = data.get("id")
-
-    if entity_id not in entities:
-        raise HTTPException(status_code=404, detail="Unknown Entity")
-    
-    timestamp = datetime.now(timezone.utc).isoformat()
-    entities[entity_id]["last_updated"] = timestamp
-
-    return {"status": "ok"}
-
 #Updates the entity status once info is known
-@app.get("/entities")
-async def get_entities():
+@app.get("/entities/ws")
+async def get_entities(db=Depends(get_db_session)):
+    subq = (
+        select(
+            GPSTelemetry.entity_id,
+            func.max(GPSTelemetry.timestamp).label("last_updated")
+            )
+            .group_by(GPSTelemetry.entity_id)
+            .subquery()
+        ) 
+
+    result = await db.execute(
+            select(Entity, subq.c.last_updated)
+            .outerjoin(subq, Entity.id == subq.c.entity_id)
+    ) 
+
     return [
-        {
-            "id": ent_id,
-            "name": ent["name"],
-            "last_updated": ent["last_updated"]
+            {
+                "id": str(entity.uuid),
+                "name": entity.name,
+                "last_updated": last_updated.isoformat() if last_updated else None
         }
-        for ent_id, ent in entities.items()
+        for entity, last_updated in result
     ]
 
 #Routes

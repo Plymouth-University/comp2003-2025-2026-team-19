@@ -12,7 +12,7 @@ function saveSetting(key, value) {
 }
 
 //Ferry data
-const entity_list = [
+let entity_list = [
   {
     "id": "b85e5637-4791-4aa4-abec-a2ac3e4a946e",
     "name": "Plymouth Venturer",
@@ -117,10 +117,11 @@ function isTrackerActive(last_updated, timeoutSeconds = 30) {
 
 async function fetchEntities() {
   try {
-    const result = await fetch("/entities");
+    const result = await fetch("/entities/ws");
     if (!result.ok) return;
 
     const data = await result.json();
+    entity_list = data;
     updateEntityList(data);
   } catch (err) {
     console.error("Failed to fetch entity data", err);
@@ -342,8 +343,7 @@ function exportMetrics() {
 let ws;
 
 function websocketConnection() {
-  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-  ws = new WebSocket(`${protocol}://${window.location.host}/tracker/ws`);
+  ws = new WebSocket(`entities/ws`);
 
   ws.onopen = () => {
     console.log("WebSocket Connected!");
