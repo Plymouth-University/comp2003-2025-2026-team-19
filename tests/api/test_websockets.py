@@ -100,7 +100,7 @@ async def test_subscribe_idempotent(db_session, db_override):
                 await ws.send_json({"action": "subscribe", "entity_ids": [entity_id]})
                 msg = await ws.receive_json(timeout=5)
 
-    assert list(msg["entities"].keys()).count(entity_id) == 1
+    assert list(msg["entities"].keys()).count(entity_id) == 1  # type: ignore
 
 
 @pytest.mark.anyio
