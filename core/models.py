@@ -1,5 +1,5 @@
 import datetime
-import uuid
+import uuid as uuid_lib
 
 from geoalchemy2 import Geometry, WKBElement
 from sqlalchemy import (
@@ -28,9 +28,9 @@ class Entity(Base):
     __tablename__ = "Entity"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    uuid: Mapped[uuid.UUID] = mapped_column(
+    uuid: Mapped[uuid_lib.UUID] = mapped_column(
         UUID(as_uuid=True),
-        default=uuid.uuid4,
+        default=uuid_lib.uuid4,
         unique=True,
         nullable=False,
         server_default=func.gen_random_uuid(),
@@ -107,9 +107,9 @@ class Route(Base):
     __tablename__ = "Route"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    uuid: Mapped[uuid.UUID] = mapped_column(
+    uuid: Mapped[uuid_lib.UUID] = mapped_column(
         UUID(as_uuid=True),
-        default=uuid.uuid4,
+        default=uuid_lib.uuid4,
         unique=True,
         nullable=False,
         server_default=func.gen_random_uuid(),

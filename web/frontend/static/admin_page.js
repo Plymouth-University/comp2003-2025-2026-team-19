@@ -118,12 +118,12 @@ function isTrackerActive(last_updated, timeoutSeconds = 30) {
 //Checks for and returns ferry status to be shown on the trackers
 async function fetchEntities() {
   try {
-    const result = await fetch("/api/v1/entities/ws");
+    const result = await fetch("/api/v1/entities");
     if (!result.ok) return;
-
     const data = await result.json();
     entity_list = data;
     updateEntityList(data);
+    console.log("On correct endpoint");
   } catch (err) {
     console.error("Failed to fetch entity data", err);
   }
@@ -134,9 +134,6 @@ document.addEventListener("DOMContentLoaded", () => {
   startMetricsPolling();
   fetchMetrics();
   fetchEntities();
-  setInterval(fetchEntities, 20000);
-  updateEntityList(entity_list);
-  websocketConnection();
 });
 
 //Activty Graph Functionality
@@ -343,59 +340,134 @@ function exportMetrics() {
 }
 
 //Fun websocket stuff
-let ws;
+const entityClient = EntityWS(handleEntityUpdate);
+entityClient.connect();
+window.addEventListener("load", () => {
+  entityClient.subscribe(entity_list.map(e => e.id))
+});
+function EntityWS(onUpdate, onStatus) {
+  let ws = null;
+  let subscribedIds = [];
+  let reconnectTimeout = null;
 
-function websocketConnection() {
-  //Enforces https which is safer
-  const protocol = location.protocol === "https:" ? "wss:" : "ws";
-  ws = new WebSocket(`${protocol}://${location.host}/api/v1/entities/ws`);
+  const connect = () => {
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:"; //Protocol used for https enforcement
+    const wsUrl = `${protocol}//${location.host}/api/v1/entities/ws`;
 
-  ws.onopen = () => {
-    console.log("WebSocket Connected!");
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch (err) {
+      console.error("WebSocket init error:", err);
+      return;
+    }
 
-    const ids = entity_list.map(e => e.id);
+    onStatus?.("connecting");
 
-    ws.send(JSON.stringify({
-      action: "subscribe",
-      entity_ids: ids
-    }));
+    ws.onopen = () => {
+      console.log("WebSocket Connected");
+      onStatus?.("connected");
+
+      //if disconnect resubscribe
+      if (subscribedIds.length > 0) {
+        subscribe(subscribedIds);
+      }
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+
+        //Shows subscribed to entities
+        if (message.status === "subscribed" && message.entities) {
+          console.log("Subscribed:", message.entities);
+          
+          //Gets location data
+          Object.entries(message.entities).forEach(([id, data]) => {
+            const lat = data?.last_location?.lat ?? null;
+            const lng = data?.last_location?.lng ?? null;
+
+            onUpdate(id, lat, lng, data);
+          });
+        }
+
+        //Gets active updates
+        else if (message.type === "update" && message.data) {
+          const { entity_id, latitude, longitude, ...extra } = message.data;
+
+          onUpdate(entity_id, latitude, longitude, extra);
+        }
+
+        //Used for the websocket tester in the settings
+        else if (message.type === "pong") {
+        onStatus?.("alive"); 
+        const statusEl = document.getElementById("ws_status");
+        statusEl.textContent = "Working";
+        statusEl.style.color = "green";
+        }    
+
+      } catch (err) {
+        console.error("Message parse error:", err);
+      }   
+    };
+
+    ws.onclose = () => {
+      console.warn("WebSocket closed. Reconnecting...");
+      onStatus?.("disconnected");
+      //Waits before reconnect
+      reconnectTimeout = setTimeout(connect, 3000);
+    };
+
+    ws.onerror = (err) => {
+      console.error("WebSocket error:", err);
+      onStatus?.("error");
+    };
   };
 
-  ws.onmessage = (event) => {
-    const message = JSON.parse(event.data);
+  //Gets entity data to track
+  const subscribe = (ids) => {
+    subscribedIds = ids;
 
-    if(message.type === "update") {
-      handleEntityUpdate(message.data);
-    }
-
-    if (message.status === "subscribed") {
-      console.log("Subscribed:", message.entities);
-    }
-
-    if (message.type === "pong") {
-      const statusEl = document.getElementById("ws_status");
-      statusEl.textContent = "Working";
-      statusEl.style.color = "green";
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        action: "subscribe",
+        entity_ids: ids
+      }));
+    } else {
+      console.warn("WS not ready, connecting first...");
     }
   };
 
-  ws.onclose = () => {
-    console.warn("Websocket close. Reconnecting...");
-    setTimeout(websocketConnection, 3000);
-  }
+  //Pings to server
+  const sendPing = () => {
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ action: "ping" }));
+    }
+  };
+  
+  const disconnect = () => {
+    if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    ws?.close();
+    ws = null;
+  };
 
-  ws.onerror = (err) => {
-    console.error("Websocket error", err);
+  return {
+    connect,
+    subscribe,
+    sendPing,
+    disconnect,
+    isConnected: () => ws?.readyState === WebSocket.OPEN
   };
 }
 
 //For websocket connection updates
-function handleEntityUpdate(update) {
-  const entity = entity_list.find(e => e.id === update.entity_id);
-
+function handleEntityUpdate(id, lat, lng, data) {
+  const entity = entity_list.find(e => e.id === id);
   if (!entity) return;
 
-  entity.last_updated = update.timestamp || new Date().toISOString();
+  entity.last_updated = data?.timestamp || new Date().toISOString();
+
+  if (lat != null) entity.latitude = lat;
+  if (lng != null) entity.longitude = lng;
 
   updateEntityList(entity_list);
 }
@@ -404,7 +476,7 @@ function handleEntityUpdate(update) {
 function testWebsocket() {
   const statusEl = document.getElementById("ws_status");
 
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
+  if (!entityClient.isConnected()) {
     statusEl.textContent = "Not connected :(";
     statusEl.style.color = "red";
     return;
@@ -413,5 +485,5 @@ function testWebsocket() {
   //Pending state
   statusEl.textContent = "Pinging...";
   statusEl.style.color = "orange";
-  ws.send(JSON.stringify({ action: "ping" }));
+  entityClient.sendPing();
 }
