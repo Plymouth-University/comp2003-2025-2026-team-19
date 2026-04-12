@@ -115,6 +115,7 @@ function isTrackerActive(last_updated, timeoutSeconds = 30) {
   return (now - last) / 1000 <= timeoutSeconds;
 }
 
+//Checks for and returns ferry status to be shown on the trackers
 async function fetchEntities() {
   try {
     const result = await fetch("/api/v1/entities/ws");
@@ -133,6 +134,8 @@ document.addEventListener("DOMContentLoaded", () => {
   startMetricsPolling();
   fetchMetrics();
   fetchEntities();
+  setInterval(fetchEntities, 20000);
+  updateEntityList(entity_list);
   websocketConnection();
 });
 
@@ -343,7 +346,9 @@ function exportMetrics() {
 let ws;
 
 function websocketConnection() {
-  ws = new WebSocket(`/api/v1/entities/ws`);
+  //Enforces https which is safer
+  const protocol = location.protocol === "https:" ? "wss:" : "ws";
+  ws = new WebSocket(`${protocol}://${location.host}/api/v1/entities/ws`);
 
   ws.onopen = () => {
     console.log("WebSocket Connected!");

@@ -63,12 +63,16 @@ async def entities_websocket(
                         "entities": entity_info,
                     }
                 )
+            elif message.get("action") == "ping":
+                await websocket.send_json({
+                    "type": "pong" #For websocket checker in the settings
+            })
     except WebSocketDisconnect:
         entities_ws_manager.disconnect(websocket)
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
 
-_ws_manager = TrackingWebSocketManager()
+tracker_ws_manager = TrackingWebSocketManager()
 
 @router.websocket("/tracker/ws")
 async def tracker_websocket(
