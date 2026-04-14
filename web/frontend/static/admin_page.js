@@ -11,51 +11,7 @@ function saveSetting(key, value) {
   startMetricsPolling();
 }
 
-//Ferry data
-let entity_list = [
-  {
-    "id": "b85e5637-4791-4aa4-abec-a2ac3e4a946e",
-    "name": "Plymouth Venturer",
-    "route": null,
-    "active": false,
-    "last_updated": null
-  },
-  {
-    "id": "fa7fa868-8eac-4e20-a69c-b7b7c17364bb",
-    "name": "Plymouth Sound",
-    "route": null,
-    "active": false,
-    "last_updated": null
-  },
-  {
-    "id": "fa0a1599-8de1-4e08-aee8-f1607e1359cb",
-    "name": "Tamar Belle",
-    "route": null,
-    "active": false,
-    "last_updated": null
-  },
-  {
-    "id": "add9ce40-e60c-41b4-b6e9-e7dc3185849c",
-    "name": "Plymouth Princess",
-    "route": null,
-    "active": false,
-    "last_updated": null
-  },
-  {
-    "id": "9e2f2cbd-2671-4972-9115-c0bd8d5cef2d",
-    "name": "Island Princess",
-    "route": null,
-    "active": false,
-    "last_updated": null
-  },
-  {
-    "id": "072caf2a-a921-4128-8369-75b237c42161",
-    "name": "Edgcumbe Belle",
-    "route": null,
-    "active": false,
-    "last_updated": null
-  }
-]
+let entity_list = {}; //Keeps entity data as an object
 
 function updateEntityList(entity_list) {
     //Gets ID for where the entries will be assigned
@@ -69,26 +25,26 @@ function updateEntityList(entity_list) {
       const li = document.createElement("li");
       
       //Used for checking ferry status
-      const active = isTrackerActive(entity.last_updated, 60);
+      const active = isTrackerActive(entity.last_location?.ts, 60);
       const statusClass = active ? "status-green" : "status-red";
 
       //List acts differently depending if route data is null or not
-      if (!entity.route) {
+      if (!entity.route || !entity.route.start_location || !entity.route.end_location) {
       //Uses innerHTML to display entities and use break
       li.innerHTML = `
-      <a href="/status/${entity.id}">
+      <a href="/status/${entity.uuid}">
       ${entity.name}
       <div class="status_row">
         Status:
         <span class="status_circle ${statusClass}"></span>
-        <span class="timestamp">Last updated: ${entity.last_updated}</span>
+        <span class="timestamp">Last updated: ${entity.last_location?.ts}</span>
         </div>
       </a>
     `;
     } else {
         //Not really needed anymore but keeping in case we *do* want to show routes on the ferry tra
         li.innerHTML = `
-        <a href="/status/${entity.id}">
+        <a href="/status/${entity.uuid}">
            ${entity.name}:<br>
            ${entity.route.start_location.name}
            →
@@ -96,7 +52,7 @@ function updateEntityList(entity_list) {
           <div class="status_row">
             Status:
             <span class="status_circle ${statusClass}"></span>
-            <span class="timestamp">Last updated: ${entity.last_updated}</span>
+            <span class="timestamp">Last updated: ${entity.last_location?.ts}</span>
            </div>
         </a>
         `;
@@ -121,9 +77,9 @@ async function fetchEntities() {
     const result = await fetch("/api/v1/entities");
     if (!result.ok) return;
     const data = await result.json();
-    entity_list = data;
+    entity_list = Object.fromEntries(data.map(e => [e.uuid, e])); //Converts to json to object to work with my code
     updateEntityList(data);
-    console.log("On correct endpoint");
+    entityClient.subscribe(Object.keys(entity_list)); //Subscribe now done with object data so its compatible
   } catch (err) {
     console.error("Failed to fetch entity data", err);
   }
@@ -342,9 +298,6 @@ function exportMetrics() {
 //Fun websocket stuff
 const entityClient = EntityWS(handleEntityUpdate);
 entityClient.connect();
-window.addEventListener("load", () => {
-  entityClient.subscribe(entity_list.map(e => e.id))
-});
 function EntityWS(onUpdate, onStatus) {
   let ws = null;
   let subscribedIds = [];
@@ -380,13 +333,15 @@ function EntityWS(onUpdate, onStatus) {
         //Shows subscribed to entities
         if (message.status === "subscribed" && message.entities) {
           console.log("Subscribed:", message.entities);
+          entity_list = message.entities;
+          updateEntityList(Object.entries(entity_list).map(([uuid, data]) => ({ uuid, ...data})));
           
           //Gets location data
           Object.entries(message.entities).forEach(([id, data]) => {
             const lat = data?.last_location?.lat ?? null;
-            const lng = data?.last_location?.lng ?? null;
+            const lon = data?.last_location?.lng ?? null;
 
-            onUpdate(id, lat, lng, data);
+            onUpdate(id, lat, lon, data);
           });
         }
 
@@ -460,16 +415,23 @@ function EntityWS(onUpdate, onStatus) {
 }
 
 //For websocket connection updates
-function handleEntityUpdate(id, lat, lng, data) {
-  const entity = entity_list.find(e => e.id === id);
-  if (!entity) return;
+function handleEntityUpdate(uuid, lat, lon, data) {
+  if (!entity_list[uuid]) return;
 
-  entity.last_updated = data?.timestamp || new Date().toISOString();
+  if (lat !=null && lon !=null) {
+    entity_list[uuid].last_location.lat = lat;
+    entity_list[uuid].last_location.lng = lon;
+  }
+  updateEntityList(Object.entries(entity_list).map(([id, d]) => ({ uuid: id, ...d})));
+}
 
-  if (lat != null) entity.latitude = lat;
-  if (lng != null) entity.longitude = lng;
+//Processes incoming messages
+function handleMessages(message) {
+  if (!message.entities) return;
 
-  updateEntityList(entity_list);
+  for (const[uuid, data] of Object.entries(message.entities)) {
+    handleEntityUpdate(uuid, data);
+  }
 }
 
 //Used for websocket test button
