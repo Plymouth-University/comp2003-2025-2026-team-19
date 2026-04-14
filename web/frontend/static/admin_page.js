@@ -37,7 +37,7 @@ function updateEntityList(entity_list) {
       <div class="status_row">
         Status:
         <span class="status_circle ${statusClass}"></span>
-        <span class="timestamp">Last updated: ${entity.last_location?.ts}</span>
+        <span class="timestamp">Last updated: ${timestampFormatter(entity.last_location?.ts)}</span>
         </div>
       </a>
     `;
@@ -52,7 +52,7 @@ function updateEntityList(entity_list) {
           <div class="status_row">
             Status:
             <span class="status_circle ${statusClass}"></span>
-            <span class="timestamp">Last updated: ${entity.last_location?.ts}</span>
+            <span class="timestamp">Last updated: ${timestampFormatter(entity.last_location?.t)}</span>
            </div>
         </a>
         `;
@@ -90,6 +90,7 @@ document.addEventListener("DOMContentLoaded", () => {
   startMetricsPolling();
   fetchMetrics();
   fetchEntities();
+  setInterval(fetchEntities, 20000); //Can be adjusted if feels too frequent, allows for updates without refresh
 });
 
 //Activty Graph Functionality
@@ -425,13 +426,17 @@ function handleEntityUpdate(uuid, lat, lon, data) {
   updateEntityList(Object.entries(entity_list).map(([id, d]) => ({ uuid: id, ...d})));
 }
 
-//Processes incoming messages
-function handleMessages(message) {
-  if (!message.entities) return;
-
-  for (const[uuid, data] of Object.entries(message.entities)) {
-    handleEntityUpdate(uuid, data);
-  }
+//Makes the timestamp returned readable for a normal human
+function timestampFormatter(ts) {
+  if (!ts) return "Null";
+  return new Date(ts).toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
 }
 
 //Used for websocket test button
