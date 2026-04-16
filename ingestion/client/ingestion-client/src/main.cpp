@@ -1,83 +1,98 @@
 #include <Arduino.h>
 
-#define MODEM_RX 10
-#define MODEM_TX 11
-#define MODEM_PWRKEY 18
+#define MODEM_BAUDRATE (115200)
+#define MODEM_TX_PIN (11)
+#define MODEM_RX_PIN (10)
+#define MODEM_DTR_PIN (9)
+#define MODEM_RING_PIN (3)
+#define MODEM_RESET_PIN (17)
+#define MODEM_RESET_LEVEL LOW
+#define SerialAT Serial1
 
-#define SerialMon Serial // Connection to computer
-#define SerialAT Serial1 // Connection to the SIM7670G
+// --- Board Controls ---
+#define BOARD_PWRKEY_PIN (18)
+#define BOARD_LED_PIN (12)
+#define LED_ON (LOW)
+#define LED_OFF (HIGH)
+
+// --- ADC / Sensors ---
+#define BOARD_BAT_ADC_PIN (4)
+#define BOARD_SOLAR_ADC_PIN (5)
+
+// --- GPS Settings ---
+#define MODEM_GPS_ENABLE_GPIO (4)
+#define MODEM_GPS_ENABLE_LEVEL (1)
+
+// --- Driver & Metadata ---
+#define TINY_GSM_MODEM_SIM7670G
+
+// --- Power Sequence Timings (ms) ---
+#define MODEM_POWERON_PULSE_WIDTH_MS (100)
+#define MODEM_POWEROFF_PULSE_WIDTH_MS (3000)
+#define MODEM_START_WAIT_MS (3000)
+
+#define TINY_GSM_RX_BUFFER 1024 // Set RX buffer to 1Kb
+
+// Set serial for debug console (to the Serial Monitor, default speed 115200)
+#define SerialMon Serial
+
+// Define the serial console for debug prints, if needed
+// #define TINY_GSM_DEBUG SerialMon
+
+// See all AT commands, if wanted
+// #define DUMP_AT_COMMANDS
+
+#include <TinyGsmClient.h>
+
+#ifdef DUMP_AT_COMMANDS // if enabled it requires the streamDebugger lib
+#include <StreamDebugger.h>
+StreamDebugger debugger(SerialAT, SerialMon);
+TinyGsm modem(debugger);
+#else
+TinyGsm modem(SerialAT);
+#endif
 
 struct GNSSInfo
 {
   bool hasFix;
-  String latitude;
-  String longitude;
+  int fixMode;
+  double latitude;
+  double longitude;
+  float altitude;
+  float speed;
+  float course;
 };
 
 String getFieldAt(String rawData, int n);
 GNSSInfo extractGPS(String rawData);
-String getResponse();
 
-String getResponse()
+GNSSInfo extractGPS(String rawData)
 {
-  String resp = "";
-  unsigned long timeout = millis() + 2000;
-  while (millis() < timeout)
+  // rawData format: FixMode,GPS_Sats,GLO_Sats,BEI_Sats,GAL_Sats,Lat,N/S,Lon,E/W,Date,Time,Alt,Speed,Course,PDOP,HDOP,VDOP,SatsUsed
+  GNSSInfo data;
+
+  if (rawData.indexOf('N') == -1 && rawData.indexOf('S') == -1)
   {
-    while (SerialAT.available() > 0)
-    {
-      resp += (char)SerialAT.read();
-      timeout = millis() + 100; // extend while data is arriving
-    }
+    data.hasFix = false;
+    return data;
   }
+  
+  data.hasFix = true;
+  
+  data.latitude = getFieldAt(rawData, 5).toDouble();
+  data.longitude = getFieldAt(rawData, 7).toDouble();
 
-  return resp;
-}
+  String latDirection = getFieldAt(rawData, 6);
+  String lonDirection = getFieldAt(rawData, 8);
 
-void setup()
-{
-  SerialMon.begin(115200);
-  delay(1000);
-  SerialMon.println("[BOOT] Starting up...");
+  if (latDirection == "S") data.latitude *= -1.0;
+  if (lonDirection == "W") data.longitude *= -1.0;
 
-  // Power on the modem
-  pinMode(MODEM_PWRKEY, OUTPUT);
-  digitalWrite(MODEM_PWRKEY, LOW);
-  delay(100);
-  digitalWrite(MODEM_PWRKEY, HIGH);
-  delay(1000);
-  digitalWrite(MODEM_PWRKEY, LOW);
-  delay(5000);
-
-  // Start serial communication with the modem
-  SerialAT.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
-  delay(500);
-
-  // Turn command echo off
-  // SerialAT.println("ATE0");
-  // delay(200);
-  // getResponse(); // flush
-
-  SerialAT.println("AT+CGNSSMODE=15");
-  delay(500);
-  SerialAT.println("AT+CGNSSPWR?");
-  delay(200);
-  String resp = getResponse();
-  if (resp.indexOf("+CGNSSPWR: 0") != -1) {
-    SerialMon.println("[BOOT] GNSS is OFF. Powering on...");
-    SerialAT.println("AT+CGNSSPWR=1");
-    delay(500);
-  } else {
-    SerialMon.println("[BOOT] GNSS is already powered.");
-  }
-
-  // Power the GPS antenna
-  SerialAT.println("AT+CGDRT=1,1");
-  delay(200);
-  SerialAT.println("AT+CGSETV=1,1");
-  delay(500);
-
-  SerialMon.println("[BOOT] Ready.");
+  data.altitude = getFieldAt(rawData, 11).toFloat();
+  data.speed    = getFieldAt(rawData, 12).toFloat();
+  data.course   = getFieldAt(rawData, 13).toFloat();
+  
+  return data;
 }
 
 String getFieldAt(String rawData, int n)
@@ -100,57 +115,106 @@ String getFieldAt(String rawData, int n)
   return rawData.substring(fieldStart, fieldEnd);
 }
 
-GNSSInfo extractGPS(String rawData)
+void setup()
 {
-  GNSSInfo data;
+  Serial.begin(115200);
 
-  if (rawData.indexOf('N') == -1 && rawData.indexOf('S') == -1)
+  // Set LED pin, ensure LED off
+  pinMode(BOARD_LED_PIN, OUTPUT);
+  digitalWrite(BOARD_LED_PIN, LED_OFF);
+
+  // Set modem reset pin ,reset modem
+  pinMode(MODEM_RESET_PIN, OUTPUT);
+  digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
+  delay(100);
+  digitalWrite(MODEM_RESET_PIN, MODEM_RESET_LEVEL);
+  delay(2600);
+  digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
+
+  // Pull down DTR to ensure the modem is not in sleep state
+  Serial.printf("Set DTR pin %d LOW\n", MODEM_DTR_PIN);
+  pinMode(MODEM_DTR_PIN, OUTPUT);
+  digitalWrite(MODEM_DTR_PIN, LOW);
+
+  // Turn on modem
+  pinMode(BOARD_PWRKEY_PIN, OUTPUT);
+  digitalWrite(BOARD_PWRKEY_PIN, LOW);
+  delay(100);
+  digitalWrite(BOARD_PWRKEY_PIN, HIGH);
+  delay(MODEM_POWERON_PULSE_WIDTH_MS);
+  digitalWrite(BOARD_PWRKEY_PIN, LOW);
+
+  // Set modem baud
+  SerialAT.begin(115200, SERIAL_8N1, MODEM_RX_PIN, MODEM_TX_PIN);
+
+  Serial.println("Start modem...");
+  delay(3000);
+
+  int retry = 0;
+  while (!modem.testAT(1000))
   {
-    data.hasFix = false;
-    return data;
+    Serial.println(".");
+    if (retry++ > 30)
+    {
+      digitalWrite(BOARD_PWRKEY_PIN, LOW);
+      delay(100);
+      digitalWrite(BOARD_PWRKEY_PIN, HIGH);
+      delay(MODEM_POWERON_PULSE_WIDTH_MS);
+      digitalWrite(BOARD_PWRKEY_PIN, LOW);
+      retry = 0;
+    }
   }
-  
-  data.hasFix = true;
-  
-  data.latitude = getFieldAt(rawData, 4);
-  data.longitude = getFieldAt(rawData, 6);
-  
-  return data;
+  Serial.println();
+  delay(200);
+
+  String modemName = "UNKNOWN";
+  while (1)
+  {
+    modemName = modem.getModemName();
+    if (modemName == "UNKNOWN")
+    {
+      Serial.println("Unable to obtain module information normally, try again");
+      delay(1000);
+    }
+    else
+    {
+      Serial.print("Model Name:");
+      Serial.println(modemName);
+      break;
+    }
+    delay(5000);
+  }
+
+  // Print modem software version
+  String res;
+  modem.sendAT("+SIMCOMATI");
+  modem.waitResponse(10000UL, res);
+  Serial.println(res);
+
+  Serial.println("Enabling GPS/GNSS/GLONASS");
+  while (!modem.enableGPS(MODEM_GPS_ENABLE_GPIO, MODEM_GPS_ENABLE_LEVEL))
+  {
+    Serial.print(".");
+  }
+  Serial.println();
+  Serial.println("GPS Enabled");
+
+  // Set GPS Baud to 115200
+  modem.setGPSBaud(115200);
 }
 
 void loop()
 {
-  SerialMon.println("[GPS] Fetching location...");
-
-  while (true)
+  Serial.println("Requesting current GPS/GNSS/GLONASS location");
+  for (;;)
   {
-    SerialAT.println("AT+CGNSSINFO");
-    String resp = getResponse();
-
-    // SerialMon.println("[DEBUG] Raw: " + resp);
-
-    if (resp.indexOf("ERROR") != -1 || resp.length() == 0)
-    {
-      SerialMon.println("[GPS] Modem error or no response");
-      delay(10000);
-      continue;
-    }
-
-    String prefix = "+CGNSSINFO: ";
-    int start = resp.indexOf(prefix);
-    if (start == -1)
-    {
-      SerialMon.println("[GPS] No CGNSSINFO in response");
-      delay(10000);
-      continue;
-    }
-    resp = resp.substring(start + prefix.length());
-
-    GNSSInfo location = extractGPS(resp);
-
+    String rawData = modem.getGPSraw();
+    
+    GNSSInfo location = extractGPS(rawData);
+    
     if (location.hasFix)
     {
-      SerialMon.printf("Success! Lat: %s, Lng: %s\n", location.latitude.c_str(), location.longitude.c_str());
+      SerialMon.printf("Success! Lat: %f, Lng: %f\n", location.latitude, location.longitude);
       delay(10000);
       break;
     }
@@ -161,35 +225,3 @@ void loop()
     }
   }
 }
-
-// void loop()
-// {
-//   // Pass commands from serial monitor to modem
-//   if (SerialMon.available()) {
-//     SerialAT.write(SerialMon.read());
-//   }
-//   // Print modem responses to serial monitor
-//   if (SerialAT.available()) {
-//     SerialMon.write(SerialAT.read());
-//   }
-// }
-
-// void loop() {
-//   SerialAT.println("AT");
-//   delay(500);
-//   SerialMon.println("[AT] " + getResponse());
-
-//   SerialAT.println("AT+CGNSSPWR?");
-//   delay(500);
-//   SerialMon.println("[PWR] " + getResponse());
-
-//   SerialAT.println("AT+CGNSSINFO");
-//   delay(500);
-//   SerialMon.println("[GPS] " + getResponse());
-
-//   SerialAT.println("AT+CGNSSINFO=32");
-//   delay(500);
-//   SerialMon.println(getResponse());
-
-//   delay(5000);
-// }
