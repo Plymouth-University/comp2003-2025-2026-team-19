@@ -33,7 +33,7 @@ def test_get_entity_by_uuid_invalid_uuid(client: TestClient):
 
     assert response.status_code == 422
     data = response.json()
-    assert "value is not a valid uuid" in data["detail"][0]["msg"]
+    assert "value is not a valid uuid" in data["detail"]
 
 
 def test_list_entities(db_session, client: TestClient):

@@ -15,8 +15,7 @@ def validate_entity_uuid(entity_id: str) -> UUID:
     try:
         obj_uuid = uuid.UUID(entity_id)
     except ValueError:
-        # Treat malformed UUID as 404
-        raise HTTPException(status_code=404, detail="Entity not found")
+        raise HTTPException(status_code=422, detail="value is not a valid uuid")
     return obj_uuid
 
 
@@ -30,6 +29,7 @@ async def get_entity(
     entity_id: UUID = Depends(validate_entity_uuid),
     db: AsyncSession = Depends(get_db_session),
 ):
+
     try:
         return await crud.get_entity_by_uuid(db, entity_id)
     except crud.EntityNotFoundError as e:
