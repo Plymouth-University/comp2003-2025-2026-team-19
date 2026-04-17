@@ -5,6 +5,8 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    ENVIRONMENT: Literal["dev", "staging", "prod"] = "dev"
+
     SERVICE_TYPE: Literal["api", "ingestion", "migration"] = "api"
 
     DATABASE_HOST: str = "db"
@@ -22,6 +24,11 @@ class Settings(BaseSettings):
 
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
+
+    SENTRY_DSN_FRONTEND_SERVER: str = ""
+    SENTRY_SCRIPT_URL: str = ""
+    SENTRY_DSN_API: str = ""
+    SENTRY_DSN_INGESTION_SERVER: str = ""
 
     @computed_field
     @property
