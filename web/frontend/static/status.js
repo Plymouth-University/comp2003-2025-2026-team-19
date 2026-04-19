@@ -13,6 +13,22 @@ const routeCoords = [
 
 const toLngLat = p => [p.lng, p.lat];
 
+// Pub markers
+const placeMarkers = [
+  {
+    name: "The Edgcumbe Arms Waterfront Country Pub & Inn",
+    lat: 50.36051260130807,
+    lng: -4.175144990186478,
+    image: "/web/api/assets/icons/Edgcumbe Arms.png"
+  },
+  {
+    name: "The VOT",
+    lat: 50.36340948751074,
+    lng: -4.1625179805190715,
+    image: "/web/api/assets/icons/VOT.png"
+  }
+];
+
 // --------------------
 // UI HELPERS
 // --------------------
@@ -238,6 +254,28 @@ function focusVessel(id) {
 // MAP INITIALIZATION
 // --------------------
 
+function addPlaceMarkers() {
+  placeMarkers.forEach(place => {
+    const el = document.createElement("div");
+    el.className = "place-marker";
+
+    const img = document.createElement("img");
+    img.src = place.image;
+    img.alt = place.name;
+
+    el.appendChild(img);
+
+    const popup = new maplibregl.Popup({ offset: 18 }).setHTML(`
+      <div class="popup-title">${place.name}</div>
+    `);
+
+    new maplibregl.Marker({ element: el, anchor: "bottom" })
+      .setLngLat([place.lng, place.lat])
+      .setPopup(popup)
+      .addTo(map);
+  });
+}
+
 function initMap() {
   map = new maplibregl.Map({
     container: 'map',
@@ -267,6 +305,8 @@ function initMap() {
       source: 'route',
       paint: { 'line-color': '#5aa7ff', 'line-width': 4 }
     });
+
+    addPlaceMarkers();
 
     // Handle any vessels that were loaded via WS before the map was ready
     Object.values(vessels).forEach(v => {
