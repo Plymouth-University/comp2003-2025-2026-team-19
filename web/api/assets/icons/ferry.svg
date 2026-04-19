@@ -1,13 +1,11 @@
 <svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-    <path d="Tag M 0 80 Q 25 75 50 80 T 100 80 L 100 100 L 0 100 Z" fill="#3498db" opacity="0.3"/>
-    
-    <path d="M 10 70 L 90 70 L 80 85 L 20 85 Z" fill="{{hull}}" stroke="#2c3e50" stroke-width="2"/>
-    
-    <rect x="25" y="45" width="50" height="25" fill="{{cabin}}" stroke="#2c3e50" stroke-width="2"/>
-    
-    <rect x="60" y="30" width="10" height="15" fill="{{trim}}" stroke="#2c3e50" stroke-width="2"/>
-    
-    <circle cx="35" cy="55" r="4" fill="{{window}}"/>
-    <circle cx="50" cy="55" r="4" fill="{{window}}"/>
-    <circle cx="65" cy="55" r="4" fill="{{window}}"/>
+    <path d="M 8 68 L 35 68 L 38 72 L 48 72 L 48 70 L 95 70 L 87 92 L 18 92 Z" fill="{{hull}}" stroke="#2c3e50" stroke-width="2"/>
+    <path d="M 16 84 L 91 84 L 88 87 L 19 87 Z" fill="{{stripe}}"/>
+    <path d="M 17 87 L 90 87 L 86.5 91 L 20.5 91 Z" fill="{{lowerHull}}" opacity="0.6"/>
+    <rect x="48" y="55" width="33" height="15" fill="{{cabinBase}}" stroke="#2c3e50" stroke-width="2"/>
+    <rect x="59" y="43" width="20" height="12" fill="{{cabin}}" stroke="#2c3e50" stroke-width="2"/>
+    <rect x="63" y="46" width="12" height="6" fill="{{window}}"/>
+    <rect x="54" y="39" width="30" height="4" fill="{{trim}}" stroke="#2c3e50" stroke-width="2"/>
+    <rect x="66" y="31" width="3" height="8" fill="{{pipe}}" stroke="#2c3e50" stroke-width="1.5"/>
+    <rect x="71" y="34" width="3" height="5" fill="{{pipe}}" stroke="#2c3e50" stroke-width="1.5"/>
 </svg>
