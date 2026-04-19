@@ -13,7 +13,7 @@ from core.database import Base, engine, get_db_session
 from core.logging import EndpointFilter
 from core.settings import settings
 
-from .routes import entity_router, health_router, websocket_router
+from .routes import entity_router, health_router, icon_router, websocket_router
 from .routes.websockets import redis_listener
 
 load_dotenv()
@@ -46,3 +46,4 @@ app = FastAPI(lifespan=lifespan, root_path="/api/v1")
 app.include_router(health_router)
 app.include_router(websocket_router)
 app.include_router(entity_router)
+app.include_router(icon_router)
