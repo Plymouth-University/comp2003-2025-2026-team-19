@@ -31,16 +31,18 @@
 #define MODEM_POWEROFF_PULSE_WIDTH_MS (3000)
 #define MODEM_START_WAIT_MS (3000)
 
+// --- Mathematical constants ---
+#define EARTH_RADIUS_METERS 6371000.0
+
+// --- Previous GPS result ---
+double last_lat = 0.0;
+double last_lng = 0.0;
+bool is_first_fix = true;
+
 #define TINY_GSM_RX_BUFFER 1024 // Set RX buffer to 1Kb
 
 // Set serial for debug console (to the Serial Monitor, default speed 115200)
 #define SerialMon Serial
-
-// Define the serial console for debug prints, if needed
-// #define TINY_GSM_DEBUG SerialMon
-
-// See all AT commands, if wanted
-// #define DUMP_AT_COMMANDS
 
 #include <TinyGsmClient.h>
 
@@ -61,10 +63,32 @@ struct GNSSInfo
   float altitude;
   float speed;
   float course;
+  float hdop;
+  int satsUsed;
 };
 
 String getFieldAt(String rawData, int n);
 GNSSInfo extractGPS(String rawData);
+double haversine(double lat1, double lng1, double lat2, double lng2);
+
+double haversine(double lat1, double lng1, double lat2, double lng2)
+{
+  // Convert degrees to radians
+  double dLat = (lat2 - lat1) * PI / 180.0;
+  double dLon = (lng2 - lng1) * PI / 180.0;
+
+  // Convert latitudes to radians for the cosine calculation
+  double rLat1 = lat1 * PI / 180.0;
+  double rLat2 = lat2 * PI / 180.0;
+
+  // Haversine formula
+  double a = sin(dLat / 2) * sin(dLat / 2) + sin(dLon / 2) * sin(dLon / 2) * cos(rLat1) * cos(rLat2);
+
+  double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+
+  // Return distance in meters
+  return EARTH_RADIUS_METERS * c;
+}
 
 GNSSInfo extractGPS(String rawData)
 {
@@ -76,22 +100,26 @@ GNSSInfo extractGPS(String rawData)
     data.hasFix = false;
     return data;
   }
-  
+
   data.hasFix = true;
-  
+
   data.latitude = getFieldAt(rawData, 5).toDouble();
   data.longitude = getFieldAt(rawData, 7).toDouble();
 
   String latDirection = getFieldAt(rawData, 6);
   String lonDirection = getFieldAt(rawData, 8);
 
-  if (latDirection == "S") data.latitude *= -1.0;
-  if (lonDirection == "W") data.longitude *= -1.0;
+  if (latDirection == "S")
+    data.latitude *= -1.0;
+  if (lonDirection == "W")
+    data.longitude *= -1.0;
 
   data.altitude = getFieldAt(rawData, 11).toFloat();
-  data.speed    = getFieldAt(rawData, 12).toFloat();
-  data.course   = getFieldAt(rawData, 13).toFloat();
-  
+  data.speed = getFieldAt(rawData, 12).toFloat();
+  data.course = getFieldAt(rawData, 13).toFloat();
+  data.hdop = getFieldAt(rawData, 15).toFloat();
+  data.satsUsed = getFieldAt(rawData, 17).toInt();
+
   return data;
 }
 
@@ -209,12 +237,23 @@ void loop()
   for (;;)
   {
     String rawData = modem.getGPSraw();
-    
-    GNSSInfo location = extractGPS(rawData);
-    
-    if (location.hasFix)
+
+    GNSSInfo update = extractGPS(rawData);
+
+    if (update.hasFix)
     {
-      SerialMon.printf("Success! Lat: %f, Lng: %f\n", location.latitude, location.longitude);
+      double distance = 0;
+      if (is_first_fix)
+      {
+        is_first_fix = false;
+      }
+      else
+      {
+        distance = haversine(last_lat, last_lng, update.latitude, update.longitude);
+      }
+      last_lat = update.latitude;
+      last_lng = update.longitude;
+      SerialMon.printf("[GPS] Success! Lat: %f, Lng: %f, Alt: %f, Speed (knots): %f, Distance: %f, Course: %f, HDOP: %f, Sats used: %d\n", update.latitude, update.longitude, update.altitude, update.speed, distance, update.course, update.hdop, update.satsUsed);
       delay(10000);
       break;
     }
