@@ -1,0 +1,10 @@
+#pragma once
+
+#ifndef CERTS_H
+#define CERTS_H
+
+static const char BROKER_CA_CERT[] = R"EOF(
+-----BEGIN CERTIFICATE-----
+-----END CERTIFICATE-----
+)EOF";
+#endif

@@ -1,4 +1,19 @@
 #include <Arduino.h>
+#include "certs.h"
+#include <PubSubClient.h>
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <ArduinoJson.h>
+#include <Preferences.h>
+
+Preferences preferences;
+String mqtt_user;
+String mqtt_pass;
+String device_id;
+String mqtt_broker;
+String wifi_ssid;
+String wifi_pass;
+bool ledToggle;
 
 #define MODEM_BAUDRATE (115200)
 #define MODEM_TX_PIN (11)
@@ -53,6 +68,116 @@ TinyGsm modem(debugger);
 #else
 TinyGsm modem(SerialAT);
 #endif
+
+// TinyGsmClientSecure secureClient(modem);
+// PubSubClient mqtt(secureClient);
+
+String topicPublish;
+String topicSubscribe;
+const int port = 1883;
+
+WiFiClientSecure secureClient;
+PubSubClient mqtt(secureClient);
+
+void updateMqttTopics()
+{
+  topicPublish = "entity/" + device_id + "/telemetry";
+  topicSubscribe = "entity/" + device_id + "/commands";
+
+  Serial.println("Topics Updated:");
+  Serial.println("Pub: " + topicPublish);
+  Serial.println("Sub: " + topicSubscribe);
+}
+
+void handleSerialProvisioning()
+{
+  if (Serial.available() > 0)
+  {
+    String input = Serial.readStringUntil('\n');
+    input.trim();
+
+    bool needsMqttReconnect = false;
+
+    if (input.startsWith("SET_USER:"))
+    {
+      mqtt_user = input.substring(9);
+      preferences.begin("mqtt-config", false);
+      preferences.putString("user", mqtt_user);
+      preferences.end();
+      needsMqttReconnect = true;
+      Serial.println("Success: MQTT User saved to NVS: " + mqtt_user);
+    }
+    else if (input.startsWith("SET_PASS:"))
+    {
+      mqtt_pass = input.substring(9);
+      preferences.begin("mqtt-config", false);
+      preferences.putString("pass", mqtt_pass);
+      preferences.end();
+      needsMqttReconnect = true;
+      Serial.println("Success: MQTT Password saved to NVS.");
+    }
+    else if (input.startsWith("SET_ID:"))
+    {
+      device_id = input.substring(7);
+      preferences.begin("mqtt-config", false);
+      preferences.putString("dev_id", device_id);
+      preferences.end();
+
+      updateMqttTopics();
+      needsMqttReconnect = true;
+
+      Serial.println("Success: Device ID saved to NVS: " + device_id);
+    }
+    else if (input.startsWith("SET_BROKER:"))
+    {
+      mqtt_broker = input.substring(11);
+      preferences.begin("mqtt-config", false);
+      preferences.putString("broker", mqtt_broker);
+      preferences.end();
+
+      mqtt.setServer(mqtt_broker.c_str(), port);
+      needsMqttReconnect = true;
+
+      Serial.println("Success: MQTT Broker saved to NVS: " + mqtt_broker);
+    }
+    else if (input.startsWith("SET_SSID:"))
+    {
+      wifi_ssid = input.substring(9);
+      preferences.begin("wifi-config", false);
+      preferences.putString("ssid", wifi_ssid);
+      preferences.end();
+      Serial.println("Success: WiFi SSID set to: " + wifi_ssid);
+    }
+    else if (input.startsWith("SET_WPASS:"))
+    {
+      wifi_pass = input.substring(10);
+      preferences.begin("wifi-config", false);
+      preferences.putString("pass", wifi_pass);
+      preferences.end();
+      Serial.println("Success: WiFi Password set.");
+    }
+    else if (input == "RESTART")
+    {
+      Serial.println("Restarting device...");
+      delay(1000);
+      ESP.restart();
+    }
+    else if (input == "SHOW_CONFIG")
+    {
+      Serial.println("Current NVS Config:");
+      Serial.println("ID: " + device_id);
+      Serial.println("Mqtt User: " + mqtt_user);
+      Serial.println("Mqtt Broker: " + mqtt_broker);
+      Serial.println("WiFi SSID: " + wifi_ssid);
+    }
+
+    if (needsMqttReconnect)
+    {
+      Serial.println("[MQTT] Config changed. Forcing reconnection...");
+      mqtt.disconnect();
+    }
+  }
+}
 
 struct GNSSInfo
 {
@@ -143,9 +268,41 @@ String getFieldAt(String rawData, int n)
   return rawData.substring(fieldStart, fieldEnd);
 }
 
+void callback(char *topic, byte *payload, unsigned int length)
+{
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+
+  char message[length + 1];
+  memcpy(message, payload, length);
+  message[length] = '\0';
+  Serial.println(message);
+
+  // Example: Turn on LED if message is "ON"
+  if (strcmp(message, "ON") == 0)
+    digitalWrite(BOARD_LED_PIN, LED_ON);
+  if (strcmp(message, "OFF") == 0)
+    digitalWrite(BOARD_LED_PIN, LED_OFF);
+}
+
 void setup()
 {
   Serial.begin(115200);
+
+  preferences.begin("mqtt-config", true);
+  mqtt_user = preferences.getString("user", "default_user");
+  mqtt_pass = preferences.getString("pass", "default_pass");
+  device_id = preferences.getString("dev_id", "G-S3-GENERIC");
+  mqtt_broker = preferences.getString("broker", "mqtt_broker");
+  preferences.end();
+
+  preferences.begin("wifi-config", true);
+  wifi_ssid = preferences.getString("ssid", "default_ssid");
+  wifi_pass = preferences.getString("pass", "default_wifi_pass");
+  preferences.end();
+
+  updateMqttTopics();
 
   // Set LED pin, ensure LED off
   pinMode(BOARD_LED_PIN, OUTPUT);
@@ -229,38 +386,141 @@ void setup()
 
   // Set GPS Baud to 115200
   modem.setGPSBaud(115200);
+
+  unsigned long lastWifiCheck = 0;
+  const unsigned long interval = 500;
+
+  Serial.print("Connecting to WiFi: " + wifi_ssid);
+  WiFi.begin(wifi_ssid.c_str(), wifi_pass.c_str());
+
+  for (;;)
+  {
+    if (WiFi.status() != WL_CONNECTED)
+    {
+      unsigned long currentMillis = millis();
+
+      if (currentMillis - lastWifiCheck >= interval)
+      {
+        lastWifiCheck = currentMillis;
+        Serial.print(".");
+      }
+    }
+    else
+    {
+      Serial.println();
+      Serial.println("WiFi connected with IP: " + WiFi.localIP().toString());
+      break;
+    }
+
+    handleSerialProvisioning();
+  }
+
+  secureClient.setCACert(BROKER_CA_CERT);
+  mqtt.setServer(mqtt_broker.c_str(), port);
+
+  mqtt.setCallback(callback);
 }
+
+void mqttConnect()
+{
+  static unsigned long lastAttempt = 0;
+
+  if (millis() - lastAttempt < 5000)
+    return;
+  lastAttempt = millis();
+  Serial.printf("[MQTT] Disconnected - state: %d\n", mqtt.state());
+  Serial.print("[MQTT] Connecting to MQTT...");
+  if (mqtt.connect(device_id.c_str(), mqtt_user.c_str(), mqtt_pass.c_str()))
+  {
+    Serial.println(" connected");
+    JsonDocument doc;
+    doc["message"] = "Device connected";
+    char buffer[256];
+    serializeJson(doc, buffer);
+    mqtt.publish(topicPublish.c_str(), buffer);
+  }
+  else
+  {
+    Serial.print(" failed, rc=");
+    Serial.print(mqtt.state());
+    Serial.println();
+  }
+}
+
+int delay_interval = 1000;
 
 void loop()
 {
-  Serial.println("Requesting current GPS/GNSS/GLONASS location");
-  for (;;)
-  {
-    String rawData = modem.getGPSraw();
+  handleSerialProvisioning();
 
+  if (!mqtt.connected())
+  {
+    mqttConnect();
+  }
+  mqtt.loop();
+
+  static unsigned long lastCheck = 0;
+  if (millis() - lastCheck > delay_interval)
+  {
+    lastCheck = millis();
+
+    String rawData = modem.getGPSraw();
     GNSSInfo update = extractGPS(rawData);
 
     if (update.hasFix)
     {
+      digitalWrite(BOARD_LED_PIN, LED_ON);
+      ledToggle = true;
+
       double distance = 0;
-      if (is_first_fix)
-      {
-        is_first_fix = false;
-      }
-      else
+      if (!is_first_fix)
       {
         distance = haversine(last_lat, last_lng, update.latitude, update.longitude);
       }
-      last_lat = update.latitude;
-      last_lng = update.longitude;
-      SerialMon.printf("[GPS] Success! Lat: %f, Lng: %f, Alt: %f, Speed (knots): %f, Distance: %f, Course: %f, HDOP: %f, Sats used: %d\n", update.latitude, update.longitude, update.altitude, update.speed, distance, update.course, update.hdop, update.satsUsed);
-      delay(10000);
-      break;
+
+      if (update.hdop <= 5 && (distance > 5 || is_first_fix))
+      {
+        JsonDocument doc;
+        doc["lat"] = update.latitude;
+        doc["lng"] = update.longitude;
+        doc["spd"] = update.speed;
+        doc["hdop"] = update.hdop;
+        doc["sats"] = update.satsUsed;
+        doc["dist"] = distance;
+
+        char buffer[256];
+        serializeJson(doc, buffer);
+        mqtt.publish(topicPublish.c_str(), buffer);
+
+        last_lat = update.latitude;
+        last_lng = update.longitude;
+        is_first_fix = false;
+        Serial.println("[MQTT] Published GPS update: " + String(buffer));
+
+        delay_interval = 10000;
+      }
+      else
+      {
+        Serial.println("[GPS] Fix acquired but HDOP too high or distance too short, skipping publish.");
+        delay_interval = 5000;
+      }
     }
     else
     {
-      SerialMon.println("[GPS] Waiting for fix...");
-      delay(3000);
+      // Toggle the LED to indicate waiting for GPS fix
+      if (!ledToggle)
+      {
+        digitalWrite(BOARD_LED_PIN, LED_ON);
+        ledToggle = true;
+      }
+      else
+      {
+        digitalWrite(BOARD_LED_PIN, LED_OFF);
+        ledToggle = false;
+      }
+
+      Serial.println("[GPS] Waiting for fix...");
+      delay_interval = 1000;
     }
   }
 }
