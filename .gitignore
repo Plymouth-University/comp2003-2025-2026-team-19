@@ -209,3 +209,15 @@ __marimo__/
 *.env
 
 *.ignoreme
+
+.pio
+.vscode/c_cpp_properties.json
+.vscode
+secrets.h
+certs.h
+mqtt/data/
+
+*.crt
+*.csr
+*.key
+*.srl
