@@ -25,17 +25,15 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
 
-<<<<<<< HEAD
     SENTRY_DSN_FRONTEND_SERVER: str = ""
     SENTRY_SCRIPT_URL: str = ""
     SENTRY_DSN_API: str = ""
     SENTRY_DSN_INGESTION_SERVER: str = ""
-=======
+
     MQTT_PORT: int = 8883
     MQTT_BROKER: str = "mqtt"
     MQTT_LISTENER_USERNAME: str = "mqtt_listener"
     MQTT_LISTENER_PASSWORD: str = "mqtt_listener_password"
->>>>>>> 649aa70 (feat: rename POSTGRES_DB, include mqtt settings)
 
     @computed_field
     @property
