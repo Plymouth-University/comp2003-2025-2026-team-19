@@ -34,6 +34,12 @@ openssl genrsa -out broker.key 2048
 openssl req -new -key broker.key -out broker.csr -subj "/CN=your-broker-hostname"
 ```
 
+## Step 3 - Sign the broker cert with the CA
+
+```bash
+openssl x509 -req -days 3650 -in broker.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out broker.crt
+```
+
 Verify the certificate was signed correctly:
  
 ```bash
