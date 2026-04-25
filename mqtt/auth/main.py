@@ -13,7 +13,7 @@ from core.models import Sensor
 app = FastAPI()
 
 logging.getLogger("uvicorn.access").addFilter(
-    EndpointFilter(exclude_endpoints=["/api/v1/health"])
+    EndpointFilter(exclude_endpoints=["/health"])
 )
 
 
