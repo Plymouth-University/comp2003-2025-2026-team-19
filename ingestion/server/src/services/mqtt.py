@@ -5,6 +5,7 @@ import ssl
 import uuid
 
 import aiomqtt
+from redis.asyncio import Redis
 import shapely
 from geoalchemy2.shape import to_shape
 
@@ -48,7 +49,7 @@ def _build_telemetry(payload: dict) -> GPSTelemetryCreate | None:
 async def _handle_message(
     topic: str,
     raw: bytes,
-    redis_client,
+    redis_client: Redis,
 ) -> None:
     entity_id = _parse_entity_id(topic)
     if entity_id is None:
@@ -86,7 +87,7 @@ async def _handle_message(
         logger.debug("Published location update for entity %s", entity_id)
 
 
-async def mqtt_listener(redis_client) -> None:
+async def mqtt_listener(redis_client: Redis) -> None:
     """
     Long-running coroutine that subscribes to MQTT and processes telemetry.
     Intended to be run as a background task from the FastAPI lifespan.

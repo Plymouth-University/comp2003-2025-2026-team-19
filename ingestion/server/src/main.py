@@ -2,10 +2,10 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-import redis
 import sentry_sdk
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from redis.asyncio import Redis
 
 from core.logging import EndpointFilter
 from core.settings import settings
@@ -30,7 +30,7 @@ logging.getLogger("uvicorn.access").addFilter(
 )
 
 app = FastAPI(title="ingestion", root_path="/api/v1")
-redis_client = redis.from_url(f"redis://{settings.REDIS_HOST}:6379")
+redis_client = Redis.from_url(f"redis://{settings.REDIS_HOST}:6379")
 
 
 @asynccontextmanager
@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
         await task
     except asyncio.CancelledError:
         pass
-    redis_client.close()
+    await redis_client.close()
 
 
 app = FastAPI(title="ingestion", lifespan=lifespan, root_path="/api/v1")
