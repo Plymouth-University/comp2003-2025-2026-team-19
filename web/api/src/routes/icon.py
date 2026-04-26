@@ -5,7 +5,8 @@ from fastapi.responses import FileResponse
 from pydantic import RootModel, ValidationError
 from pydantic_core import PydanticCustomError
 from pydantic_extra_types import Color
-from src.services.icon_service import colour_svg
+
+from ..services.icon_service import colour_svg
 
 router = APIRouter(prefix="/icon", tags=["icons"])
 
