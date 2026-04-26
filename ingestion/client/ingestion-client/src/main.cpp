@@ -1,10 +1,22 @@
 #include <Arduino.h>
 #include "certs.h"
 #include <PubSubClient.h>
-#include <WiFi.h>
-#include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <esp_task_wdt.h>
+
+#define TINY_GSM_MODEM_SIM7670G
+#define TINY_GSM_RX_BUFFER 1024
+
+#include <TinyGsmClient.h>
+
+#ifndef TINY_GSM_FORK_LIBRARY
+#error "Please use LilyGO's forked TinyGSM. Copy the lib directory from https://github.com/Xinyuan-LilyGO/LilyGO-T-A76XX to your Arduino libraries."
+#endif
+
+#define CELLULAR_APN "giffgaff.com"
 
 Preferences preferences;
 String mqtt_user;
@@ -14,54 +26,34 @@ String mqtt_broker;
 String wifi_ssid;
 String wifi_pass;
 bool ledToggle;
+bool forcePublish = false;
 
-#define MODEM_BAUDRATE (115200)
-#define MODEM_TX_PIN (11)
-#define MODEM_RX_PIN (10)
-#define MODEM_DTR_PIN (9)
-#define MODEM_RING_PIN (3)
-#define MODEM_RESET_PIN (17)
-#define MODEM_RESET_LEVEL LOW
-#define SerialAT Serial1
+#define MODEM_BAUDRATE                  (115200)
+#define MODEM_TX_PIN                    (11)
+#define MODEM_RX_PIN                    (10)
+#define MODEM_DTR_PIN                   (9)
+#define MODEM_RING_PIN                  (3)
+#define MODEM_RESET_PIN                 (17)
+#define MODEM_RESET_LEVEL               LOW
+#define SerialAT                        Serial1
 
-// --- Board Controls ---
-#define BOARD_PWRKEY_PIN (18)
-#define BOARD_LED_PIN (12)
-#define LED_ON (LOW)
-#define LED_OFF (HIGH)
+#define BOARD_PWRKEY_PIN                (18)
+#define BOARD_LED_PIN                   (12)
+#define LED_ON                          (LOW)
+#define LED_OFF                         (HIGH)
 
-// --- ADC / Sensors ---
-#define BOARD_BAT_ADC_PIN (4)
-#define BOARD_SOLAR_ADC_PIN (5)
+#define BOARD_BAT_ADC_PIN               (4)
+#define BOARD_SOLAR_ADC_PIN             (5)
 
-// --- GPS Settings ---
-#define MODEM_GPS_ENABLE_GPIO (4)
-#define MODEM_GPS_ENABLE_LEVEL (1)
+#define MODEM_GPS_ENABLE_GPIO           (4)
+#define MODEM_GPS_ENABLE_LEVEL          (1)
 
-// --- Driver & Metadata ---
-#define TINY_GSM_MODEM_SIM7670G
+#define MODEM_POWERON_PULSE_WIDTH_MS    (100)
+#define EARTH_RADIUS_METERS             6371000.0
 
-// --- Power Sequence Timings (ms) ---
-#define MODEM_POWERON_PULSE_WIDTH_MS (100)
-#define MODEM_POWEROFF_PULSE_WIDTH_MS (3000)
-#define MODEM_START_WAIT_MS (3000)
-
-// --- Mathematical constants ---
-#define EARTH_RADIUS_METERS 6371000.0
-
-// --- Previous GPS result ---
-double last_lat = 0.0;
-double last_lng = 0.0;
-bool is_first_fix = true;
-
-#define TINY_GSM_RX_BUFFER 1024 // Set RX buffer to 1Kb
-
-// Set serial for debug console (to the Serial Monitor, default speed 115200)
 #define SerialMon Serial
 
-#include <TinyGsmClient.h>
-
-#ifdef DUMP_AT_COMMANDS // if enabled it requires the streamDebugger lib
+#ifdef DUMP_AT_COMMANDS
 #include <StreamDebugger.h>
 StreamDebugger debugger(SerialAT, SerialMon);
 TinyGsm modem(debugger);
@@ -69,226 +61,348 @@ TinyGsm modem(debugger);
 TinyGsm modem(SerialAT);
 #endif
 
-// TinyGsmClientSecure secureClient(modem);
-// PubSubClient mqtt(secureClient);
+TinyGsmClient cellClient(modem);
+WiFiClientSecure wifiClient;
+PubSubClient mqtt(wifiClient);
+
+enum ConnMode { CONN_NONE, CONN_WIFI, CONN_CELL };
+ConnMode activeConn = CONN_NONE;
 
 String topicPublish;
 String topicSubscribe;
-const int port = 1883;
 
-WiFiClientSecure secureClient;
-PubSubClient mqtt(secureClient);
+double last_lat = 0.0;
+double last_lng = 0.0;
+double last_update_time = 0.0;
+bool is_first_fix = true;
+int delay_interval = 1000;
+
+// ===== Topics =====
 
 void updateMqttTopics()
 {
   topicPublish = "entity/" + device_id + "/telemetry";
   topicSubscribe = "entity/" + device_id + "/commands";
-
-  Serial.println("Topics Updated:");
   Serial.println("Pub: " + topicPublish);
   Serial.println("Sub: " + topicSubscribe);
 }
 
-void handleSerialProvisioning()
+// ===== Preferences =====
+
+void setPreference(const char* name, const char* key, const String& value)
 {
-  if (Serial.available() > 0)
-  {
-    String input = Serial.readStringUntil('\n');
-    input.trim();
-
-    bool needsMqttReconnect = false;
-
-    if (input.startsWith("SET_USER:"))
-    {
-      mqtt_user = input.substring(9);
-      preferences.begin("mqtt-config", false);
-      preferences.putString("user", mqtt_user);
-      preferences.end();
-      needsMqttReconnect = true;
-      Serial.println("Success: MQTT User saved to NVS: " + mqtt_user);
-    }
-    else if (input.startsWith("SET_PASS:"))
-    {
-      mqtt_pass = input.substring(9);
-      preferences.begin("mqtt-config", false);
-      preferences.putString("pass", mqtt_pass);
-      preferences.end();
-      needsMqttReconnect = true;
-      Serial.println("Success: MQTT Password saved to NVS.");
-    }
-    else if (input.startsWith("SET_ID:"))
-    {
-      device_id = input.substring(7);
-      preferences.begin("mqtt-config", false);
-      preferences.putString("dev_id", device_id);
-      preferences.end();
-
-      updateMqttTopics();
-      needsMqttReconnect = true;
-
-      Serial.println("Success: Device ID saved to NVS: " + device_id);
-    }
-    else if (input.startsWith("SET_BROKER:"))
-    {
-      mqtt_broker = input.substring(11);
-      preferences.begin("mqtt-config", false);
-      preferences.putString("broker", mqtt_broker);
-      preferences.end();
-
-      mqtt.setServer(mqtt_broker.c_str(), port);
-      needsMqttReconnect = true;
-
-      Serial.println("Success: MQTT Broker saved to NVS: " + mqtt_broker);
-    }
-    else if (input.startsWith("SET_SSID:"))
-    {
-      wifi_ssid = input.substring(9);
-      preferences.begin("wifi-config", false);
-      preferences.putString("ssid", wifi_ssid);
-      preferences.end();
-      Serial.println("Success: WiFi SSID set to: " + wifi_ssid);
-    }
-    else if (input.startsWith("SET_WPASS:"))
-    {
-      wifi_pass = input.substring(10);
-      preferences.begin("wifi-config", false);
-      preferences.putString("pass", wifi_pass);
-      preferences.end();
-      Serial.println("Success: WiFi Password set.");
-    }
-    else if (input == "RESTART")
-    {
-      Serial.println("Restarting device...");
-      delay(1000);
-      ESP.restart();
-    }
-    else if (input == "SHOW_CONFIG")
-    {
-      Serial.println("Current NVS Config:");
-      Serial.println("ID: " + device_id);
-      Serial.println("Mqtt User: " + mqtt_user);
-      Serial.println("Mqtt Broker: " + mqtt_broker);
-      Serial.println("WiFi SSID: " + wifi_ssid);
-    }
-
-    if (needsMqttReconnect)
-    {
-      Serial.println("[MQTT] Config changed. Forcing reconnection...");
-      mqtt.disconnect();
-    }
-  }
+  preferences.begin(name, false);
+  preferences.putString(key, value);
+  preferences.end();
 }
 
-struct GNSSInfo
-{
-  bool hasFix;
-  int fixMode;
-  double latitude;
-  double longitude;
-  float altitude;
-  float speed;
-  float course;
-  float hdop;
-  int satsUsed;
-};
-
-String getFieldAt(String rawData, int n);
-GNSSInfo extractGPS(String rawData);
-double haversine(double lat1, double lng1, double lat2, double lng2);
+// ===== GPS =====
 
 double haversine(double lat1, double lng1, double lat2, double lng2)
 {
-  // Convert degrees to radians
   double dLat = (lat2 - lat1) * PI / 180.0;
   double dLon = (lng2 - lng1) * PI / 180.0;
-
-  // Convert latitudes to radians for the cosine calculation
   double rLat1 = lat1 * PI / 180.0;
   double rLat2 = lat2 * PI / 180.0;
+  double a = sin(dLat/2)*sin(dLat/2) + sin(dLon/2)*sin(dLon/2)*cos(rLat1)*cos(rLat2);
+  return EARTH_RADIUS_METERS * 2 * atan2(sqrt(a), sqrt(1-a));
+}
 
-  // Haversine formula
-  double a = sin(dLat / 2) * sin(dLat / 2) + sin(dLon / 2) * sin(dLon / 2) * cos(rLat1) * cos(rLat2);
+struct GNSSInfo { bool hasFix; double latitude, longitude; float altitude, speed, course, hdop; int satsUsed; };
 
-  double c = 2 * atan2(sqrt(a), sqrt(1 - a));
-
-  // Return distance in meters
-  return EARTH_RADIUS_METERS * c;
+String getFieldAt(String rawData, int n)
+{
+  int commaIndex = -1;
+  for (int i = 0; i < n; i++) commaIndex = rawData.indexOf(",", commaIndex + 1);
+  int fieldStart = commaIndex + 1;
+  int fieldEnd = rawData.indexOf(",", fieldStart);
+  return fieldEnd == -1 ? rawData.substring(fieldStart) : rawData.substring(fieldStart, fieldEnd);
 }
 
 GNSSInfo extractGPS(String rawData)
 {
-  // rawData format: FixMode,GPS_Sats,GLO_Sats,BEI_Sats,GAL_Sats,Lat,N/S,Lon,E/W,Date,Time,Alt,Speed,Course,PDOP,HDOP,VDOP,SatsUsed
   GNSSInfo data;
-
-  if (rawData.indexOf('N') == -1 && rawData.indexOf('S') == -1)
-  {
-    data.hasFix = false;
-    return data;
-  }
-
+  if (rawData.indexOf('N') == -1 && rawData.indexOf('S') == -1) { data.hasFix = false; return data; }
   data.hasFix = true;
-
   data.latitude = getFieldAt(rawData, 5).toDouble();
   data.longitude = getFieldAt(rawData, 7).toDouble();
-
-  String latDirection = getFieldAt(rawData, 6);
-  String lonDirection = getFieldAt(rawData, 8);
-
-  if (latDirection == "S")
-    data.latitude *= -1.0;
-  if (lonDirection == "W")
-    data.longitude *= -1.0;
-
+  if (getFieldAt(rawData, 6) == "S") data.latitude *= -1.0;
+  if (getFieldAt(rawData, 8) == "W") data.longitude *= -1.0;
   data.altitude = getFieldAt(rawData, 11).toFloat();
   data.speed = getFieldAt(rawData, 12).toFloat();
   data.course = getFieldAt(rawData, 13).toFloat();
   data.hdop = getFieldAt(rawData, 15).toFloat();
   data.satsUsed = getFieldAt(rawData, 17).toInt();
-
   return data;
 }
 
-String getFieldAt(String rawData, int n)
+// ===== System =====
+
+float readBatVoltage()
 {
-  int commaIndex = -1;
-
-  for (int i = 0; i < n; i++)
-  {
-    commaIndex = rawData.indexOf(",", commaIndex + 1);
-  }
-
-  int fieldStart = commaIndex + 1;
-  int fieldEnd = rawData.indexOf(",", fieldStart);
-
-  if (fieldEnd == -1)
-  {
-    return rawData.substring(fieldStart);
-  }
-
-  return rawData.substring(fieldStart, fieldEnd);
+  return modem.getBattVoltage() / 1000.0f;
 }
 
-void callback(char *topic, byte *payload, unsigned int length)
+void blinkError(int times)
 {
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  Serial.print("] ");
+  for (int i = 0; i < times; i++) {
+    digitalWrite(BOARD_LED_PIN, LED_ON);
+    delay(100);
+    digitalWrite(BOARD_LED_PIN, LED_OFF);
+    delay(100);
+  }
+  delay(500);
+}
 
+// ===== MQTT Callbacks =====
+
+void wifiMqttCallback(char* topic, byte* payload, unsigned int length)
+{
   char message[length + 1];
   memcpy(message, payload, length);
   message[length] = '\0';
-  Serial.println(message);
-
-  // Example: Turn on LED if message is "ON"
-  if (strcmp(message, "ON") == 0)
-    digitalWrite(BOARD_LED_PIN, LED_ON);
-  if (strcmp(message, "OFF") == 0)
-    digitalWrite(BOARD_LED_PIN, LED_OFF);
+  Serial.printf("Message [%s]: %s\n", topic, message);
+  if (strcmp(message, "ON") == 0) digitalWrite(BOARD_LED_PIN, LED_ON);
+  if (strcmp(message, "OFF") == 0) digitalWrite(BOARD_LED_PIN, LED_OFF);
 }
+
+void cellMqttCallback(const char* topic, const uint8_t* payload, uint32_t len)
+{
+  char message[len + 1];
+  memcpy(message, payload, len);
+  message[len] = '\0';
+  Serial.printf("Message [%s]: %s\n", topic, message);
+  if (strcmp(message, "ON") == 0) digitalWrite(BOARD_LED_PIN, LED_ON);
+  if (strcmp(message, "OFF") == 0) digitalWrite(BOARD_LED_PIN, LED_OFF);
+}
+
+// ===== Network =====
+
+bool tryWifi()
+{
+  if (wifi_ssid == "default_ssid" || wifi_ssid.isEmpty()) return false;
+
+  Serial.print("[WiFi] Connecting to " + wifi_ssid + "...");
+  WiFi.begin(wifi_ssid.c_str(), wifi_pass.c_str());
+
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\n[WiFi] Connected: " + WiFi.localIP().toString());
+    wifiClient.setCACert(BROKER_CA_CERT);
+    mqtt.setClient(wifiClient);
+    activeConn = CONN_WIFI;
+    return true;
+  }
+
+  Serial.println("\n[WiFi] Failed");
+  WiFi.disconnect();
+  return false;
+}
+
+void uploadCellCerts()
+{
+  modem.sendAT("+CFSGFIS=3,\"ca.crt\"");
+  if (modem.waitResponse(3000) == 1) {
+    Serial.println("[Cell] CA cert already on modem");
+    return;
+  }
+
+  Serial.println("[Cell] Uploading CA cert to modem...");
+  String cert = String(BROKER_CA_CERT);
+  cert.trim();
+  int certLen = cert.length();
+
+  modem.sendAT("+CFSWFILE=3,\"ca.crt\",0," + String(certLen) + ",10000");
+  if (modem.waitResponse(10000, "DOWNLOAD") != 1) {
+    Serial.println("[Cell] Modem not ready for cert upload");
+    return;
+  }
+
+  SerialAT.print(cert);
+  if (modem.waitResponse(10000) == 1) {
+    Serial.println("[Cell] CA cert uploaded successfully");
+  } else {
+    Serial.println("[Cell] CA cert upload failed");
+  }
+}
+
+bool tryCell()
+{
+  Serial.println("[Cell] Waiting for network...");
+  if (!modem.waitForNetwork(60000L)) {
+    Serial.println("[Cell] Network failed");
+    return false;
+  }
+
+  Serial.println("[Cell] Connecting GPRS...");
+  if (!modem.gprsConnect(CELLULAR_APN, "", "")) {
+    Serial.println("[Cell] GPRS failed");
+    return false;
+  }
+  Serial.println("[Cell] Connected: " + modem.localIP().toString());
+
+  // Configure SSL context 0
+  modem.sendAT("+CSSLCFG=\"sslversion\",0,4");       // TLS 1.2
+  modem.waitResponse();
+  modem.sendAT("+CSSLCFG=\"cacert\",0,\"ca.crt\"");
+  modem.waitResponse();
+  modem.sendAT("+CSSLCFG=\"ignorertctime\",0,1");
+  modem.waitResponse();
+
+  // Initialise modem MQTT stack with SSL enabled
+  modem.mqtt_begin(true);
+
+  mqtt.setClient(cellClient);
+  activeConn = CONN_CELL;
+  return true;
+}
+
+bool isNetworkUp()
+{
+  if (activeConn == CONN_WIFI) return WiFi.status() == WL_CONNECTED;
+  if (activeConn == CONN_CELL) return modem.isGprsConnected();
+  return false;
+}
+
+void connectNetwork()
+{
+  if (!tryWifi()) {
+    Serial.println("[Net] Falling back to cellular...");
+    if (!tryCell()) {
+      Serial.println("[Net] All connections failed, will retry in loop");
+    }
+  }
+}
+
+// ===== MQTT =====
+
+bool isMqttConnected()
+{
+  if (activeConn == CONN_WIFI) return mqtt.connected();
+  if (activeConn == CONN_CELL) return modem.mqtt_connected();
+  return false;
+}
+
+bool mqttPublish(const String& topic, const char* payload)
+{
+  if (activeConn == CONN_WIFI) return mqtt.publish(topic.c_str(), payload);
+  if (activeConn == CONN_CELL) return modem.mqtt_publish(0, topic.c_str(), payload);
+  return false;
+}
+
+void mqttConnect()
+{
+  static unsigned long lastAttempt = 0;
+  if (millis() - lastAttempt < 5000) return;
+  lastAttempt = millis();
+
+  if (!isNetworkUp()) {
+    Serial.println("[Net] Connection dropped, reconnecting...");
+    activeConn = CONN_NONE;
+    connectNetwork();
+    if (activeConn == CONN_NONE) return;
+  }
+
+  Serial.printf("[MQTT] Connecting via %s...\n", activeConn == CONN_WIFI ? "WiFi" : "Cell");
+
+  if (activeConn == CONN_WIFI) {
+    mqtt.setServer(mqtt_broker.c_str(), 8883);
+    if (mqtt.connect(device_id.c_str(), mqtt_user.c_str(), mqtt_pass.c_str())) {
+      Serial.println("[MQTT] WiFi connected");
+      mqtt.subscribe(topicSubscribe.c_str());
+      forcePublish = true;
+    } else {
+      Serial.printf("[MQTT] WiFi failed rc=%d\n", mqtt.state());
+    }
+  } else {
+    if (modem.mqtt_connect(0, mqtt_broker.c_str(), 8883,
+                           device_id.c_str(), mqtt_user.c_str(), mqtt_pass.c_str())) {
+      Serial.println("[MQTT] Cell connected");
+      modem.mqtt_set_callback(cellMqttCallback);
+      modem.mqtt_subscribe(0, topicSubscribe.c_str());
+      forcePublish = true;
+    } else {
+      Serial.println("[MQTT] Cell failed");
+    }
+  }
+}
+
+// ===== Serial provisioning =====
+
+void handleSerialProvisioning()
+{
+  if (!Serial.available()) return;
+  String input = Serial.readStringUntil('\n');
+  input.trim();
+  bool needsMqttReconnect = false;
+
+  if (input.startsWith("SET_USER:")) {
+    mqtt_user = input.substring(9);
+    setPreference("mqtt-config", "user", mqtt_user);
+    needsMqttReconnect = true;
+    Serial.println("Success: User saved: " + mqtt_user);
+  } else if (input.startsWith("SET_PASS:")) {
+    mqtt_pass = input.substring(9);
+    setPreference("mqtt-config", "pass", mqtt_pass);
+    needsMqttReconnect = true;
+    Serial.println("Success: Password saved.");
+  } else if (input.startsWith("SET_ID:")) {
+    device_id = input.substring(7);
+    setPreference("mqtt-config", "dev_id", device_id);
+    updateMqttTopics();
+    needsMqttReconnect = true;
+    Serial.println("Success: Device ID saved: " + device_id);
+  } else if (input.startsWith("SET_BROKER:")) {
+    mqtt_broker = input.substring(11);
+    setPreference("mqtt-config", "broker", mqtt_broker);
+    needsMqttReconnect = true;
+    Serial.println("Success: Broker saved: " + mqtt_broker);
+  } else if (input.startsWith("SET_SSID:")) {
+    wifi_ssid = input.substring(9);
+    setPreference("wifi-config", "ssid", wifi_ssid);
+    Serial.println("Success: SSID saved: " + wifi_ssid);
+  } else if (input.startsWith("SET_WPASS:")) {
+    wifi_pass = input.substring(10);
+    setPreference("wifi-config", "pass", wifi_pass);
+    Serial.println("Success: WiFi password saved.");
+  } else if (input == "FORCE_PUBLISH") {
+    forcePublish = true;
+    Serial.println("Success: Next GPS update will be published regardless of HDOP/distance.");
+  } else if (input == "SHOW_CONFIG") {
+    Serial.println("ID: " + device_id);
+    Serial.println("User: " + mqtt_user);
+    Serial.println("Broker: " + mqtt_broker);
+    Serial.println("WiFi SSID: " + wifi_ssid);
+    Serial.printf("Connection: %s\n",
+      activeConn == CONN_WIFI ? "WiFi" :
+      activeConn == CONN_CELL ? "Cell" : "None");
+  } else if (input == "RESTART") {
+    Serial.println("Restarting...");
+    delay(1000);
+    ESP.restart();
+  }
+
+  if (needsMqttReconnect) {
+    Serial.println("[MQTT] Config changed, reconnecting...");
+    if (activeConn == CONN_WIFI) mqtt.disconnect();
+    else if (activeConn == CONN_CELL) modem.mqtt_disconnect();
+  }
+}
+
+// ===== Setup =====
 
 void setup()
 {
   Serial.begin(115200);
+  Serial.setTimeout(100);
+
+  esp_task_wdt_init(30, true);
+  esp_task_wdt_add(NULL);
 
   preferences.begin("mqtt-config", true);
   mqtt_user = preferences.getString("user", "default_user");
@@ -304,11 +418,23 @@ void setup()
 
   updateMqttTopics();
 
-  // Set LED pin, ensure LED off
+  if (device_id == "G-S3-GENERIC") {
+    Serial.println("[WARN] Device ID not configured! Use SET_ID:<uuid>");
+  }
+  if (mqtt_broker == "mqtt_broker") {
+    Serial.println("[WARN] Broker not configured! Use SET_BROKER:<ip>");
+  }
+  if (mqtt_user == "default_user") {
+    Serial.println("[WARN] MQTT user not configured! Use SET_USER:<username>");
+  }
+
   pinMode(BOARD_LED_PIN, OUTPUT);
   digitalWrite(BOARD_LED_PIN, LED_OFF);
 
-  // Set modem reset pin ,reset modem
+  if (device_id == "G-S3-GENERIC" || mqtt_broker == "mqtt_broker") {
+    blinkError(5);
+  }
+
   pinMode(MODEM_RESET_PIN, OUTPUT);
   digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
   delay(100);
@@ -316,12 +442,9 @@ void setup()
   delay(2600);
   digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
 
-  // Pull down DTR to ensure the modem is not in sleep state
-  Serial.printf("Set DTR pin %d LOW\n", MODEM_DTR_PIN);
   pinMode(MODEM_DTR_PIN, OUTPUT);
   digitalWrite(MODEM_DTR_PIN, LOW);
 
-  // Turn on modem
   pinMode(BOARD_PWRKEY_PIN, OUTPUT);
   digitalWrite(BOARD_PWRKEY_PIN, LOW);
   delay(100);
@@ -329,135 +452,60 @@ void setup()
   delay(MODEM_POWERON_PULSE_WIDTH_MS);
   digitalWrite(BOARD_PWRKEY_PIN, LOW);
 
-  // Set modem baud
   SerialAT.begin(115200, SERIAL_8N1, MODEM_RX_PIN, MODEM_TX_PIN);
-
-  Serial.println("Start modem...");
+  Serial.println("Starting modem...");
   delay(3000);
 
   int retry = 0;
-  while (!modem.testAT(1000))
-  {
-    Serial.println(".");
-    if (retry++ > 30)
-    {
-      digitalWrite(BOARD_PWRKEY_PIN, LOW);
-      delay(100);
+  while (!modem.testAT(1000)) {
+    Serial.print(".");
+    if (retry++ > 30) {
       digitalWrite(BOARD_PWRKEY_PIN, HIGH);
       delay(MODEM_POWERON_PULSE_WIDTH_MS);
       digitalWrite(BOARD_PWRKEY_PIN, LOW);
       retry = 0;
     }
   }
-  Serial.println();
-  delay(200);
 
-  String modemName = "UNKNOWN";
-  while (1)
-  {
-    modemName = modem.getModemName();
-    if (modemName == "UNKNOWN")
-    {
-      Serial.println("Unable to obtain module information normally, try again");
-      delay(1000);
-    }
-    else
-    {
-      Serial.print("Model Name:");
-      Serial.println(modemName);
-      break;
-    }
-    delay(5000);
+  String modemName;
+  while ((modemName = modem.getModemName()) == "UNKNOWN") {
+    Serial.println("Waiting for modem...");
+    delay(1000);
   }
+  Serial.println("Modem: " + modemName);
 
-  // Print modem software version
-  String res;
-  modem.sendAT("+SIMCOMATI");
-  modem.waitResponse(10000UL, res);
-  Serial.println(res);
-
-  Serial.println("Enabling GPS/GNSS/GLONASS");
-  while (!modem.enableGPS(MODEM_GPS_ENABLE_GPIO, MODEM_GPS_ENABLE_LEVEL))
-  {
-    Serial.print(".");
-  }
-  Serial.println();
-  Serial.println("GPS Enabled");
-
-  // Set GPS Baud to 115200
+  Serial.println("Enabling GPS...");
+  while (!modem.enableGPS(MODEM_GPS_ENABLE_GPIO, MODEM_GPS_ENABLE_LEVEL)) delay(500);
   modem.setGPSBaud(115200);
+  Serial.println("GPS enabled");
 
-  unsigned long lastWifiCheck = 0;
-  const unsigned long interval = 500;
+  uploadCellCerts();
+  connectNetwork();
 
-  Serial.print("Connecting to WiFi: " + wifi_ssid);
-  WiFi.begin(wifi_ssid.c_str(), wifi_pass.c_str());
-
-  for (;;)
-  {
-    if (WiFi.status() != WL_CONNECTED)
-    {
-      unsigned long currentMillis = millis();
-
-      if (currentMillis - lastWifiCheck >= interval)
-      {
-        lastWifiCheck = currentMillis;
-        Serial.print(".");
-      }
-    }
-    else
-    {
-      Serial.println();
-      Serial.println("WiFi connected with IP: " + WiFi.localIP().toString());
-      break;
-    }
-
-    handleSerialProvisioning();
-  }
-
-  secureClient.setCACert(BROKER_CA_CERT);
-  mqtt.setServer(mqtt_broker.c_str(), port);
-
-  mqtt.setCallback(callback);
+  // WiFi MQTT config (cell MQTT is configured per-connect via modem API)
+  mqtt.setCallback(wifiMqttCallback);
+  mqtt.setKeepAlive(60);
+  mqtt.setSocketTimeout(15);
 }
 
-void mqttConnect()
-{
-  static unsigned long lastAttempt = 0;
-
-  if (millis() - lastAttempt < 5000)
-    return;
-  lastAttempt = millis();
-  Serial.printf("[MQTT] Disconnected - state: %d\n", mqtt.state());
-  Serial.print("[MQTT] Connecting to MQTT...");
-  if (mqtt.connect(device_id.c_str(), mqtt_user.c_str(), mqtt_pass.c_str()))
-  {
-    Serial.println(" connected");
-    JsonDocument doc;
-    doc["message"] = "Device connected";
-    char buffer[256];
-    serializeJson(doc, buffer);
-    mqtt.publish(topicPublish.c_str(), buffer);
-  }
-  else
-  {
-    Serial.print(" failed, rc=");
-    Serial.print(mqtt.state());
-    Serial.println();
-  }
-}
-
-int delay_interval = 1000;
+// ===== Loop =====
 
 void loop()
 {
+  if (activeConn == CONN_WIFI && WiFi.status() != WL_CONNECTED) {
+    Serial.println("[Net] WiFi signal lost! Forcing fallback process...");
+    mqtt.disconnect();
+    activeConn = CONN_NONE;
+  }
+
+  esp_task_wdt_reset();
+
   handleSerialProvisioning();
 
-  if (!mqtt.connected())
-  {
-    mqttConnect();
-  }
-  mqtt.loop();
+  if (!isMqttConnected()) mqttConnect();
+
+  if (activeConn == CONN_WIFI) mqtt.loop();
+  if (activeConn == CONN_CELL) modem.mqtt_handle();
 
   static unsigned long lastCheck = 0;
   if (millis() - lastCheck > delay_interval)
@@ -472,13 +520,11 @@ void loop()
       digitalWrite(BOARD_LED_PIN, LED_ON);
       ledToggle = true;
 
-      double distance = 0;
-      if (!is_first_fix)
-      {
-        distance = haversine(last_lat, last_lng, update.latitude, update.longitude);
-      }
+      double distance = is_first_fix ? 0 : haversine(last_lat, last_lng, update.latitude, update.longitude);
+      double currentTime = millis() / 1000.0;
+      double timeDelta = currentTime - last_update_time;
 
-      if (update.hdop <= 5 && (distance > 5 || is_first_fix))
+      if ((update.hdop <= 5 && (distance > 5 || is_first_fix)) || forcePublish || timeDelta > 300)
       {
         JsonDocument doc;
         doc["lat"] = update.latitude;
@@ -487,38 +533,34 @@ void loop()
         doc["hdop"] = update.hdop;
         doc["sats"] = update.satsUsed;
         doc["dist"] = distance;
+        doc["bat"] = readBatVoltage();
 
         char buffer[256];
         serializeJson(doc, buffer);
-        mqtt.publish(topicPublish.c_str(), buffer);
+
+        if (mqttPublish(topicPublish, buffer)) {
+          Serial.println("[MQTT] Published: " + String(buffer));
+        } else {
+          Serial.println("[MQTT] Publish failed");
+        }
 
         last_lat = update.latitude;
         last_lng = update.longitude;
         is_first_fix = false;
-        Serial.println("[MQTT] Published GPS update: " + String(buffer));
-
+        forcePublish = false;
+        last_update_time = currentTime;
         delay_interval = 10000;
       }
       else
       {
-        Serial.println("[GPS] Fix acquired but HDOP too high or distance too short, skipping publish.");
+        Serial.println("[GPS] Skipping (HDOP too high or distance too short)");
         delay_interval = 5000;
       }
     }
     else
     {
-      // Toggle the LED to indicate waiting for GPS fix
-      if (!ledToggle)
-      {
-        digitalWrite(BOARD_LED_PIN, LED_ON);
-        ledToggle = true;
-      }
-      else
-      {
-        digitalWrite(BOARD_LED_PIN, LED_OFF);
-        ledToggle = false;
-      }
-
+      digitalWrite(BOARD_LED_PIN, ledToggle ? LED_OFF : LED_ON);
+      ledToggle = !ledToggle;
       Serial.println("[GPS] Waiting for fix...");
       delay_interval = 1000;
     }
