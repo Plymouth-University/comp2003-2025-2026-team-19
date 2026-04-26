@@ -35,7 +35,12 @@ config.set_main_option("sqlalchemy.url", settings.MIGRATION_DATABASE_URL)  # typ
 
 def include_object(object, name, type_, reflected, compare_to):
     # Exclude PostGIS internal tables from Alembic's comparison
-    if type_ == "table" and name in ("spatial_ref_sys", "geometry_columns"):
+    if type_ == "table" and name in (
+        "spatial_ref_sys",
+        "geometry_columns",
+        "layer",
+        "topology",
+    ):
         return False
     return True
 
