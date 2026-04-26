@@ -23,4 +23,4 @@ COPY ./core /app/core
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH=/app
 
-CMD ["python", "-m", "alembic", "upgrade", "head"]
+CMD ["sh", "-c", "python -m alembic upgrade head && python database/migrations/seed.py"]
