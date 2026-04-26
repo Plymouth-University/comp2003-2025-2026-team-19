@@ -40,6 +40,10 @@ services:
         - action: rebuild
           path: pyproject.toml
 
+  mqtt:
+    ports:
+      - "1883:8883"
+
   redis:
     ports:
       - "6379:6379"
