@@ -10,10 +10,16 @@ from fastapi.templating import Jinja2Templates
 from core.logging import EndpointFilter
 from core.settings import settings
 
+from pathlib import Path
+
 load_dotenv()
 
 templates = Jinja2Templates(directory="static/")
 static = StaticFiles(directory="static/")
+
+BASE_DIR = Path(__file__).resolve().parent
+assets_dir = BASE_DIR / "assets"
+assets = StaticFiles(directory=assets_dir)
 
 sentry_sdk.init(
     dsn=settings.SENTRY_DSN_FRONTEND_SERVER,
@@ -37,6 +43,7 @@ app = fastapi.FastAPI(
 )
 
 app.mount("/static", static, name="static")
+app.mount("/assets", assets, name="assets")
 
 
 @app.get("/status")

@@ -69,6 +69,8 @@ services:
     restart: always
     env_file:
       - .env
+    volumes:
+      - ./web/api/assets:/app/assets:ro
     depends_on:
       api:
         condition: service_healthy

@@ -17,15 +17,15 @@ const toLngLat = p => [p.lng, p.lat];
 const placeMarkers = [
   {
     name: "The Edgcumbe Arms Waterfront Country Pub & Inn",
-    lat: 50.36051260130807,
-    lng: -4.175144990186478,
-    image: "/web/api/assets/icons/Edgcumbe Arms.png"
+    lat: 50.36048523305711,
+    lng: -4.175217262906168,
+    image: "/assets/icons/edgcumbe-arms.png"
   },
   {
     name: "The VOT",
-    lat: 50.36340948751074,
-    lng: -4.1625179805190715,
-    image: "/web/api/assets/icons/VOT.png"
+    lat: 50.36340164623572,
+    lng: -4.162515981862114,
+    image: "/assets/icons/VOT.png"
   }
 ];
 
@@ -259,19 +259,19 @@ function addPlaceMarkers() {
     const el = document.createElement("div");
     el.className = "place-marker";
 
-    const img = document.createElement("img");
-    img.src = place.image;
-    img.alt = place.name;
+    el.style.backgroundImage = `url("${place.image}")`;
+    el.style.width = "52px";
+    el.style.height = "52px";
 
-    el.appendChild(img);
-
-    const popup = new maplibregl.Popup({ offset: 18 }).setHTML(`
-      <div class="popup-title">${place.name}</div>
-    `);
+    el.addEventListener("click", () => {
+      new maplibregl.Popup({ offset: 18 })
+        .setLngLat([place.lng, place.lat])
+        .setHTML(`<div class="popup-title">${place.name}</div>`)
+        .addTo(map);
+    });
 
     new maplibregl.Marker({ element: el, anchor: "bottom" })
       .setLngLat([place.lng, place.lat])
-      .setPopup(popup)
       .addTo(map);
   });
 }
