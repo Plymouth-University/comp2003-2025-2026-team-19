@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Route Management Dashboard</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #333; }
+        .dashboard { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h2 { margin-top: 0; font-size: 1.2rem; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.85em; color: #555;}
+        input, select, textarea { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        textarea { height: 120px; font-family: monospace; }
+        button { padding: 10px 15px; background: #0d6efd; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%;}
+        button:hover { background: #0b5ed7; }
+        button.danger { background: #dc3545; width: auto; padding: 6px 12px; font-size: 0.85em;}
+        button.danger:hover { background: #bb2d3b; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; }
+        th { background-color: #f8f9fa; }
+        .badge { background: #ffc107; color: #000; padding: 3px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; }
+        #authSection { display: flex; gap: 10px; align-items: flex-end; background: #343a40; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; max-width: 1200px; margin-left: auto; margin-right: auto;}
+        #authSection input { width: 200px; }
+        #authSection button { width: auto; }
+    </style>
+</head>
+<body>
+
+    <div id="authSection">
+        <div class="form-group" style="margin: 0;">
+            <label style="color: #ccc;">Admin User</label>
+            <input type="text" id="username" placeholder="Username">
+        </div>
+        <div class="form-group" style="margin: 0;">
+            <label style="color: #ccc;">Password</label>
+            <input type="password" id="password" placeholder="Password">
+        </div>
+        <button onclick="loadDashboard()">Connect</button>
+    </div>
+
+    <div class="dashboard">
+        <div class="controls">
+            <div class="card">
+                <h2>1. Create New Route</h2>
+                <div class="form-group">
+                    <label>Start Location</label>
+                    <select id="startLocation"></select>
+                </div>
+                <div class="form-group">
+                    <label>End Location</label>
+                    <select id="endLocation"></select>
+                </div>
+                <div class="form-group">
+                    <label>Route Colour</label>
+                    <input type="color" id="routeColor" value="#5aa7ff" style="height: 40px; padding: 2px; cursor: pointer;">
+                </div>
+                <button onclick="createRoute()">Create Route</button>
+            </div>
+
+            <div class="card">
+                <h2>2. Import Trajectory</h2>
+                <div class="form-group">
+                    <label>Target Route ID</label>
+                    <input type="number" id="targetRouteId" placeholder="e.g., 5">
+                </div>
+                <div class="form-group">
+                    <label>GeoJSON Coordinates Array</label>
+                    <textarea id="coordinates" placeholder="[[lng, lat], [lng, lat]]"></textarea>
+                </div>
+                <button onclick="importTrajectory()">Upload Points</button>
+            </div>
+        </div>
+
+        <div class="data-view">
+            <div class="card">
+                <div class="header-bar">
+                    <h2 style="border: none; margin: 0; padding: 0;">Active Routes</h2>
+                    <button onclick="fetchRoutes()" style="width: auto; background: #6c757d;">Refresh</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Path</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="routesTableBody">
+                        <tr><td colspan="4">Enter credentials and connect to load routes.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Centralized helper for authenticated fetch requests
+        async function apiFetch(endpoint, options = {}) {
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+            if (!user || !pass) {
+                alert("Please enter credentials at the top.");
+                return null;
+            }
+
+            options.headers = {
+                'Content-Type': 'application/json',
+                'Authorization': 'Basic ' + btoa(user + ':' + pass)
+            };
+
+            const response = await fetch(`/api/v1/admin${endpoint}`, options);
+            if (response.status === 401) {
+                alert("Unauthorized: Incorrect username or password.");
+                return null;
+            }
+            
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || "API Error");
+            return data;
+        }
+
+        // --- Core Functions ---
+
+        async function loadDashboard() {
+            try {
+                // Fetch locations for the dropdowns
+                const locations = await apiFetch('/locations');
+                if (!locations) return; // Auth failed
+
+                const startSel = document.getElementById('startLocation');
+                const endSel = document.getElementById('endLocation');
+                startSel.innerHTML = endSel.innerHTML = '';
+
+                locations.forEach(loc => {
+                    startSel.innerHTML += `<option value="${loc.id}">${loc.name}</option>`;
+                    endSel.innerHTML += `<option value="${loc.id}">${loc.name}</option>`;
+                });
+
+                // Fetch the routes table
+                await fetchRoutes();
+            } catch (e) {
+                alert(e.message);
+            }
+        }
+
+        async function fetchRoutes() {
+            try {
+                const routes = await apiFetch('/routes');
+                if (!routes) return;
+
+                const tbody = document.getElementById('routesTableBody');
+                // Define assignSelect here so the loop can use it!
+                const assignSelect = document.getElementById('assignRouteSelect');
+                
+                // Preserve the currently selected route in the dropdown if we are just refreshing
+                const currentAssignVal = assignSelect ? assignSelect.value : "";
+                
+                tbody.innerHTML = '';
+                if (assignSelect) {
+                    assignSelect.innerHTML = '<option value="">-- Select Route --</option>';
+                }
+
+                routes.forEach(r => {
+                    const statusText = r.point_count > 0 ? `✅ ${r.point_count} points` : `❌ No map data`;
+                    const activeWarning = r.active_entities > 0 
+                        ? `<br><span class="badge" style="background:#ffc107; padding:2px 6px; border-radius:10px; font-size:0.8em; color:#000;">Active: ${r.active_entities} entities</span>` 
+                        : '';
+                        
+                    // Create a visual swatch dot
+                    const swatch = `<span style="display:inline-block; width:12px; height:12px; background-color:${r.color}; border-radius:50%; margin-right:5px; vertical-align:-1px;"></span>`;
+
+                    // 1. Add to the Table
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${r.id}</strong></td>
+                            <td>${swatch} ${r.start} ↔ ${r.end}<br><small style="color: #888;">${r.uuid}</small></td>
+                            <td>${statusText} ${activeWarning}</td>
+                            <td>
+                                <button class="danger" onclick="deleteRoute(${r.id}, ${r.active_entities})">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                    
+                    // 2. Add to the Entity Assignment Dropdown
+                    if (assignSelect) {
+                        assignSelect.innerHTML += `<option value="${r.id}">Route ${r.id}: ${r.start} ↔ ${r.end}</option>`;
+                    }
+                });
+
+                if (assignSelect && currentAssignVal) {
+                    assignSelect.value = currentAssignVal;
+                }
+                
+                // Refresh the checkbox UI if it exists
+                if (typeof renderEntityCheckboxes === 'function') {
+                    renderEntityCheckboxes(); 
+                }
+                
+            } catch (e) {
+                alert(e.message);
+            }
+        }
+
+        async function createRoute() {
+            const start_id = document.getElementById('startLocation').value;
+            const end_id = document.getElementById('endLocation').value;
+            const color = document.getElementById('routeColor').value; // Get color
+
+            try {
+                const res = await apiFetch('/routes', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        start_location_id: parseInt(start_id),
+                        end_location_id: parseInt(end_id),
+                        color: color // Send color
+                    })
+                });
+                if (res) {
+                    alert(res.message);
+                    fetchRoutes();
+                }
+            } catch (e) {
+                alert(e.message);
+            }
+        }
+
+        async function deleteRoute(id, activeEntities) {
+            if (activeEntities > 0) {
+                const confirmMsg = `WARNING: There are ${activeEntities} entities currently assigned to this route.\n\nDeleting this route will instantly unassign them (they will remain in the database, but lose their active route status).\n\nAre you sure you want to proceed?`;
+                if (!confirm(confirmMsg)) return;
+            } else {
+                if (!confirm(`Are you sure you want to delete Route ${id}?`)) return;
+            }
+
+            try {
+                const res = await apiFetch(`/routes/${id}`, { method: 'DELETE' });
+                if (res) {
+                    fetchRoutes();
+                }
+            } catch (e) {
+                alert(e.message);
+            }
+        }
+
+        async function importTrajectory() {
+            const routeId = document.getElementById('targetRouteId').value;
+            const rawCoords = document.getElementById('coordinates').value;
+
+            try {
+                const coordinates = JSON.parse(rawCoords);
+                if (!Array.isArray(coordinates)) throw new Error("Data must be a JSON array.");
+                
+                const res = await apiFetch('/trajectory', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        route_id: parseInt(routeId),
+                        coordinates: coordinates
+                    })
+                });
+                if (res) {
+                    alert(res.message);
+                    document.getElementById('coordinates').value = '';
+                    fetchRoutes();
+                }
+            } catch (e) {
+                alert(`Error: ${e.message}`);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,11 +1,12 @@
 from uuid import UUID
 
-import crud
+from .. import crud
 from fastapi import APIRouter, Depends, HTTPException
 
 from core.database import AsyncSession, get_db_session
 
-router = APIRouter(prefix="/api/v1/routes", tags=["routes"])
+
+router = APIRouter(prefix="/routes", tags=["routes"])
 
 
 @router.get("/{route_uuid}/trajectory")

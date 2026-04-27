@@ -108,25 +108,35 @@ async def get_entities_info(
 async def get_route_trajectory_geojson(
     db: AsyncSession, route_uuid: UUID
 ) -> dict | None:
-    """
-    Fetches ordered points for a route and formats them as a GeoJSON FeatureCollection.
-    """
-    stmt = (
-        select(func.ST_X(Point.geom).label("lng"), func.ST_Y(Point.geom).label("lat"))
-        .join(Route, Route.id == Point.route_id)
+    # 1. Fetch the route and its attributes
+    route_stmt = (
+        select(Route)
+        .options(selectinload(Route.attributes))
         .where(Route.uuid == route_uuid)
-        .order_by(Point.sequence)
     )
+    route_res = await db.execute(route_stmt)
+    route = route_res.scalar_one_or_none()
 
-    result = await db.execute(stmt)
-    rows = result.all()
-
-    if not rows:
+    if not route:
         return None
 
-    # Format exactly as MapLibre expects
-    coordinates = [[row.lng, row.lat] for row in rows]
+    # 2. Extract the color
+    route_color = "#5aa7ff"
+    for attr in route.attributes:
+        if attr.key == "color":
+            route_color = attr.value
+            break
 
+    # 3. Get the points
+    stmt = (
+        select(func.ST_X(Point.geom).label("lng"), func.ST_Y(Point.geom).label("lat"))
+        .where(Point.route_id == route.id)
+        .order_by(Point.sequence)
+    )
+    points_res = await db.execute(stmt)
+    coordinates = [[row.lng, row.lat] for row in points_res.all()]
+
+    # 4. Inject color into properties
     return {
         "type": "FeatureCollection",
         "features": [
@@ -136,6 +146,7 @@ async def get_route_trajectory_geojson(
                 "properties": {
                     "route_uuid": str(route_uuid),
                     "point_count": len(coordinates),
+                    "color": route_color,
                 },
             }
         ],
