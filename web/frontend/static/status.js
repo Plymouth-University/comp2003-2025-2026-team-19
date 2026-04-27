@@ -4,12 +4,13 @@
 
 let map, hoverPopup;
 const vessels = {}; // Collection of vessel objects keyed by ID
+const loadedRoutes = new Set(); // Track which routes have been loaded
 
-// Default route for visual reference
-const routeCoords = [
-  { lat: 50.36549641988576, lng: -4.164723457671051 }, // Stonehouse
-  { lat: 50.36086978940922, lng: -4.174937309091103 }  // Cremyll
-];
+// // Default route for visual reference
+// const routeCoords = [
+//   { lat: 50.36549641988576, lng: -4.164723457671051 }, // Stonehouse
+//   { lat: 50.36086978940922, lng: -4.174937309091103 }  // Cremyll
+// ];
 
 const toLngLat = p => [p.lng, p.lat];
 
@@ -57,12 +58,9 @@ function fitAllVessels() {
   const activeVessels = Object.values(vessels).filter(v => v.lng !== null && v.lat !== null);
 
   if (activeVessels.length > 0) {
-    routeCoords.forEach(p => bounds.extend([p.lng, p.lat]));
     activeVessels.forEach(v => {
       bounds.extend([v.lng, v.lat]);
     });
-  } else {
-    routeCoords.forEach(p => bounds.extend([p.lng, p.lat]));
   }
 
   // Safety check: ensure bounds are not empty before fitting
@@ -70,6 +68,7 @@ function fitAllVessels() {
     map.fitBounds(bounds, {
       maxZoom: 16,
       duration: 1000,
+      padding: getFitPadding(),
       essential: true
     });
   }
@@ -85,7 +84,9 @@ function fitAllVessels() {
 let hasInitialFit = false;
 
 function syncVesselData(id, lat, lng, extra = {}) {
-  // 1. Initialize vessel if new
+  // 1. Initialize vessel if new and extract route info if available
+  const routeUuid = extra.route ? extra.route.uuid : null;
+
   if (!vessels[id]) {
     vessels[id] = {
       id: id,
@@ -99,6 +100,10 @@ function syncVesselData(id, lat, lng, extra = {}) {
       marker: null,
       lastUpdated: null
     };
+  }
+
+  if (routeUuid) {
+      ensureRouteOnMap(routeUuid);
   }
 
   const v = vessels[id];
@@ -242,7 +247,8 @@ function initMap() {
   map = new maplibregl.Map({
     container: 'map',
     style: 'https://tiles.stadiamaps.com/styles/osm_bright.json',
-    center: [routeCoords[0].lng, routeCoords[0].lat],
+    // Default center set to Stonehouse [Lng, Lat] since routeCoords is removed
+    center: [-4.164723457671051, 50.36549641988576], 
     zoom: 14,
     dragRotate: false
   });
@@ -251,22 +257,6 @@ function initMap() {
 
   map.on('load', () => {
     map.setPadding(getFitPadding());
-
-    // Shared Route Line
-    map.addSource('route', {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        geometry: { type: 'LineString', coordinates: routeCoords.map(toLngLat) }
-      }
-    });
-
-    map.addLayer({
-      id: 'route-line',
-      type: 'line',
-      source: 'route',
-      paint: { 'line-color': '#5aa7ff', 'line-width': 4 }
-    });
 
     // Handle any vessels that were loaded via WS before the map was ready
     Object.values(vessels).forEach(v => {
@@ -369,6 +359,34 @@ function TrackerWS({ onUpdate, onStatus, onError }) {
   };
 
   return { subscribe };
+}
+
+// --------------------
+// MAP LOGIC
+// --------------------
+function ensureRouteOnMap(routeUuid) {
+  if (!map || !routeUuid || loadedRoutes.has(routeUuid)) return;
+
+  // Mark as loaded so we don't trigger multiple fetch requests
+  loadedRoutes.add(routeUuid);
+
+  const sourceId = `route-${routeUuid}`;
+  
+  map.addSource(sourceId, {
+    type: 'geojson',
+    data: `/api/v1/routes/${routeUuid}/trajectory`
+  });
+
+  map.addLayer({
+    id: `route-line-${routeUuid}`,
+    type: 'line',
+    source: sourceId,
+    paint: { 
+        'line-color': '#5aa7ff', 
+        'line-width': 4,
+        'line-opacity': 0.7 
+    }
+  });
 }
 
 // --------------------

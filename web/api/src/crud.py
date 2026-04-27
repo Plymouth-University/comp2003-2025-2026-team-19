@@ -6,7 +6,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import aliased, selectinload
 
 from core.database import AsyncSession
-from core.models import Entity, EntityOnRoute, GPSTelemetry, Location, Route
+from core.models import Entity, EntityOnRoute, GPSTelemetry, Location, Point, Route
 
 from .exceptions import EntityNotFoundError
 from .schema.entity import ReadEntity
@@ -102,4 +102,41 @@ async def get_entities_info(
             ),
         }
         for row in rows
+    }
+
+
+async def get_route_trajectory_geojson(
+    db: AsyncSession, route_uuid: UUID
+) -> dict | None:
+    """
+    Fetches ordered points for a route and formats them as a GeoJSON FeatureCollection.
+    """
+    stmt = (
+        select(func.ST_X(Point.geom).label("lng"), func.ST_Y(Point.geom).label("lat"))
+        .join(Route, Route.id == Point.route_id)
+        .where(Route.uuid == route_uuid)
+        .order_by(Point.sequence)
+    )
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    if not rows:
+        return None
+
+    # Format exactly as MapLibre expects
+    coordinates = [[row.lng, row.lat] for row in rows]
+
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "LineString", "coordinates": coordinates},
+                "properties": {
+                    "route_uuid": str(route_uuid),
+                    "point_count": len(coordinates),
+                },
+            }
+        ],
     }
