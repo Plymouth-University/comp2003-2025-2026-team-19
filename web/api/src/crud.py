@@ -1,4 +1,5 @@
 import logging
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import desc, func, select
@@ -42,7 +43,7 @@ async def list_entities(db: AsyncSession) -> list[ReadEntity]:
 
 
 async def get_entities_info(
-    db: AsyncSession, entity_uuids: list[str]
+    db: AsyncSession, entity_uuids: list[UUID] | Literal["all"]
 ) -> dict[str, dict]:
     StartLoc = aliased(Location)
     EndLoc = aliased(Location)
@@ -50,7 +51,7 @@ async def get_entities_info(
     if entity_uuids == "all":
         entity_uuids = list(
             map(str, (await db.execute(select(Entity.uuid))).scalars().all())
-        )
+        )  # type: ignore
 
         logger.info(f"Subscribing to all entities: {entity_uuids}")
 

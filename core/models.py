@@ -3,6 +3,7 @@ import uuid
 
 from geoalchemy2 import Geometry, WKBElement
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -48,6 +49,9 @@ class Entity(Base):
     )
     current_route: Mapped["EntityOnRoute"] = relationship(
         "EntityOnRoute", back_populates="entity", uselist=False, viewonly=True
+    )
+    sensors: Mapped[list["Sensor"]] = relationship(
+        "Sensor", back_populates="entity", cascade="all, delete-orphan"
     )
 
 
@@ -231,3 +235,49 @@ class APIKey(Base):
         Integer, ForeignKey("Entity.id"), nullable=True
     )
     allowed_entity: Mapped["Entity"] = relationship("Entity")
+
+
+class Sensor(Base):
+    __tablename__ = "Sensor"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    uuid: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        default=uuid.uuid4,
+        unique=True,
+        nullable=False,
+        server_default=func.gen_random_uuid(),
+    )
+    entity_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("Entity.id", ondelete="CASCADE"), nullable=True
+    )
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    mqtt_username: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    mqtt_password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    entity: Mapped["Entity"] = relationship("Entity", back_populates="sensors")
+    acls: Mapped[list["SensorACL"]] = relationship(
+        "SensorACL", back_populates="sensor", cascade="all, delete-orphan"
+    )
+
+
+class SensorACL(Base):
+    __tablename__ = "SensorACL"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    sensor_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("Sensor.id", ondelete="CASCADE"), nullable=False
+    )
+    topic: Mapped[str] = mapped_column(String(255), nullable=False)
+    rw: Mapped[int] = mapped_column(Integer, nullable=False)  # 1=sub, 2=pub, 3=both
+
+    sensor: Mapped["Sensor"] = relationship("Sensor", back_populates="acls")
+
+    __table_args__ = (UniqueConstraint("sensor_id", "topic"),)

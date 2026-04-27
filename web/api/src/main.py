@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -9,6 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import Base, engine, get_db_session
+from core.logging import EndpointFilter
+from core.settings import settings
 
 from .routes import entity_router, health_router, websocket_router
 from .routes.websockets import redis_listener
@@ -16,20 +19,17 @@ from .routes.websockets import redis_listener
 load_dotenv()
 
 sentry_sdk.init(
-    dsn=os.getenv("SENTRY_DSN"),
-    environment=os.getenv("SENTRY_ENVIRONMENT", "dev"),
+    dsn=settings.SENTRY_DSN_API,
+    environment=settings.ENVIRONMENT,
     send_default_pii=True,
-    # Enable sending logs to Sentry
-    enable_logs=True,
-    # Set traces_sample_rate to 1.0 to capture 100%
-    # of transactions for tracing.
+    enable_logs=False,
     traces_sample_rate=1.0,
-    # Set profile_session_sample_rate to 1.0 to profile 100%
-    # of profile sessions.
     profile_session_sample_rate=1.0,
-    # Set profile_lifecycle to "trace" to automatically
-    # run the profiler on when there is an active transaction
     profile_lifecycle="trace",
+)
+
+logging.getLogger("uvicorn.access").addFilter(
+    EndpointFilter(exclude_endpoints=["/api/v1/health"])
 )
 
 

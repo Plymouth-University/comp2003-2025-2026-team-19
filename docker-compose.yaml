@@ -123,5 +123,38 @@ services:
       ingestion-server:
         condition: service_healthy
 
+  mqtt-auth:
+    build:
+      context: .
+      dockerfile: ./mqtt/auth/Dockerfile
+    env_file:
+      - .env
+    depends_on:
+      postgis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mqtt:
+    image: vernemq/vernemq
+    ports:
+      - "8883:8883"
+    environment:
+      - DOCKER_VERNEMQ_ACCEPT_EULA=yes
+    volumes:
+      - ./mqtt/config/vernemq.conf:/vernemq/vernemq.conf.template:ro
+      - ./mqtt/config/certs:/etc/vernemq/certs:ro
+    entrypoint: ["/bin/sh", "-c", "cp /vernemq/vernemq.conf.template /etc/vernemq/vernemq.conf && exec start_vernemq"]
+    depends_on:
+      mqtt-auth:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   ferrytracker_postgres:
+  mqtt_data:
+  mqtt_log:
