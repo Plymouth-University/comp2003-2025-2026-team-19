@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     MIGRATION_DB_USER: str = "alembic_user"
     MIGRATOR_PASSWORD: str = "alembic_password"
 
-    ADMIN_USER: str
-    ADMIN_PASSWORD: str
+    ADMIN_USER: str = "admin_user"
+    ADMIN_PASSWORD: str = "admin_password"
 
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
