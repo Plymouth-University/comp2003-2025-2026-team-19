@@ -9,11 +9,20 @@ from geoalchemy2.shape import to_shape
 from core.database import AsyncSession, get_db_session
 from core.settings import settings
 
+from uuid import UUID
+
 from .. import crud
 
 router = APIRouter(tags=["websockets"])
 
 logger = logging.getLogger("uvicorn")
+
+def is_valid_uuid(val):
+    try: 
+        UUID(str(val))
+        return True
+    except ValueError:
+        return False
 
 
 class TrackingWebSocketManager:
@@ -49,11 +58,34 @@ async def entities_websocket(
     await entities_ws_manager.connect(websocket)
     try:
         while True:
-            message: dict = await websocket.receive_json()
-            if message.get("action") == "subscribe":
-                entity_info = await crud.get_entities_info(
-                    db, message.get("entity_ids", [])
-                )
+            try:
+                message: dict = await websocket.receive_json()
+            except Exception:
+                await websocket.close(code=1007)
+                return
+            action = message.get("action")
+            if not action:
+                await websocket.close(code=1007)
+                return
+            if action not in {"subscribe", "ping"}:
+                await websocket.close(code=1008)
+                return
+            if action == "subscribe":
+                entity_ids = message.get("entity_ids")
+                if entity_ids != "all" and not isinstance(entity_ids, list):
+                    await websocket.close(code=1008)
+                    return
+                
+                if isinstance(entity_ids, list):
+                    valid_ids = [eid for eid in entity_ids if is_valid_uuid(eid)]
+
+                    if not valid_ids:
+                        await websocket.close(code=1007)
+                        return
+                else:
+                    valid_ids = entity_ids
+                
+                entity_info = await crud.get_entities_info(db, valid_ids)
 
                 await entities_ws_manager.subscribe(websocket, list(entity_info.keys()))
 
@@ -63,7 +95,7 @@ async def entities_websocket(
                         "entities": entity_info,
                     }
                 )
-            elif message.get("action") == "ping":
+            elif action == "ping":
                 await websocket.send_json({
                     "type": "pong" #For websocket checker in the settings
             })
@@ -71,7 +103,7 @@ async def entities_websocket(
         entities_ws_manager.disconnect(websocket)
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
-        await entities_ws_manager.close(code=1008)
+        await websocket.close(code=1008)
         return
 
 
@@ -104,12 +136,8 @@ async def redis_listener():
                                 await entities_ws_manager.broadcast(str(entity_id), data)
                         except json.JSONDecodeError:
                             logger.error(f"Malformed JSON received: {message['data']}")
-                            await entities_ws_manager.close(code=1007, reason="Invalid JSON")
                         except Exception as e:
                             logger.error(f"Error broadcasting message: {e}")
-                            await entities_ws_manager.close(code=1009)
-
-                            
 
         except (ConnectionError, TimeoutError, OSError) as e:
             logger.warning(
