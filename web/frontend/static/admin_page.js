@@ -52,7 +52,7 @@ function updateEntityList(entity_list) {
           <div class="status_row">
             Status:
             <span class="status_circle ${statusClass}"></span>
-            <span class="timestamp">Last updated: ${timestampFormatter(entity.last_location?.t)}</span>
+            <span class="timestamp">Last updated: ${timestampFormatter(entity.last_location?.ts)}</span>
            </div>
         </a>
         `;
@@ -90,7 +90,6 @@ document.addEventListener("DOMContentLoaded", () => {
   startMetricsPolling();
   fetchMetrics();
   fetchEntities();
-  setInterval(fetchEntities, 20000); //Can be adjusted if feels too frequent, allows for updates without refresh
 });
 
 //Activty Graph Functionality
@@ -422,6 +421,7 @@ function handleEntityUpdate(uuid, lat, lon, data) {
   if (lat !=null && lon !=null) {
     entity_list[uuid].last_location.lat = lat;
     entity_list[uuid].last_location.lng = lon;
+    entity_list[uuid].last_location.ts = data.timestamp ?? new Date ().toISOString();
   }
   updateEntityList(Object.entries(entity_list).map(([id, d]) => ({ uuid: id, ...d})));
 }

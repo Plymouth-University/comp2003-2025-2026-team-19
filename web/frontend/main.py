@@ -14,8 +14,6 @@ import sentry_sdk
 from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from core.settings import settings
-
 
 from core.logging import EndpointFilter
 from core.settings import settings
@@ -187,60 +185,6 @@ async def get_metrics():
 async def clear_metrics():
     metrics.clear()
     return {"message": "Metrics cleared"}
-
-#Entity status tracking
-entities = {
-    "b85e5637-4791-4aa4-abec-a2ac3e4a946e": {
-        "name": "Plymouth Venturer",
-        "last_updated": None
-    },
-    "fa7fa868-8eac-4e20-a69c-b7b7c17364bb": {
-        "name": "Plymouth Sound",
-        "last_updated": None
-    },
-    "fa0a1599-8de1-4e08-aee8-f1607e1359cb": {
-        "name": "Tamar Belle",
-        "last_updated": None
-    },
-    "add9ce40-e60c-41b4-b6e9-e7dc3185849c": {
-        "name": "Plymouth Princess",
-        "last_updated": None
-    },
-    "9e2f2cbd-2671-4972-9115-c0bd8d5cef2d": {
-        "name": "Island Princess",
-        "last_updated": None
-    },
-    "072caf2a-a921-4128-8369-75b237c42161": {
-        "name": "Edgcumbe Belle",
-        "last_updated": None
-    }
-}
-
-#Updates the entity status once info is known
-@app.get("/api/v1/entities/ws")
-async def get_entities(db=Depends(get_db_session)):
-    subq = (
-        select(
-            GPSTelemetry.entity_id,
-            func.max(GPSTelemetry.timestamp).label("last_updated")
-            )
-            .group_by(GPSTelemetry.entity_id)
-            .subquery()
-        ) 
-
-    result = await db.execute(
-            select(Entity, subq.c.last_updated)
-            .outerjoin(subq, Entity.id == subq.c.entity_id)
-    ) 
-
-    return [
-            {
-                "id": str(entity.uuid),
-                "name": entity.name,
-                "last_updated": last_updated.isoformat() if last_updated else None
-        }
-        for entity, last_updated in result
-    ]
 
 #Routes
 @app.get("/status")
