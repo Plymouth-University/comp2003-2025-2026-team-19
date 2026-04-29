@@ -65,7 +65,7 @@ async def entities_websocket(
                 return
             action = message.get("action")
             if not action:
-                await websocket.close(code=1008, reason="Invalid request")
+                await websocket.close(code=1007, reason="Invalid JSON")
                 return
             if action not in {"subscribe", "ping"}:
                 await websocket.close(code=1008, reason="Invalid request")
