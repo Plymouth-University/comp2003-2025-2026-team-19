@@ -1,5 +1,5 @@
 import json
-import uuid
+import uuid as uuid_lib
 
 import redis.asyncio as redis
 import shapely
@@ -22,7 +22,7 @@ redis_client = redis.from_url(f"redis://{settings.REDIS_HOST}:6379")
 
 @router.post("/{entity_id}/telemetry")
 async def add_telemetry(
-    entity_id: uuid.UUID,
+    entity_id: uuid_lib.UUID,
     telemetry_data: GPSTelemetryCreate,
     api_key: APIKey = Depends(get_api_key),
     db: AsyncSession = Depends(get_db_session),
