@@ -61,26 +61,26 @@ async def entities_websocket(
             try:
                 message: dict = await websocket.receive_json()
             except Exception:
-                await websocket.close(code=1007)
+                await websocket.close(code=1007, reason="Invalid JSON")
                 return
             action = message.get("action")
             if not action:
-                await websocket.close(code=1007)
+                await websocket.close(code=1007, reason="Invalid JSON")
                 return
             if action not in {"subscribe", "ping"}:
-                await websocket.close(code=1008)
+                await websocket.close(code=1008, reason="Invalid request")
                 return
             if action == "subscribe":
-                entity_ids = message.get("entity_ids")
+                entity_ids = message.get("entity_ids", [])
                 if entity_ids != "all" and not isinstance(entity_ids, list):
-                    await websocket.close(code=1008)
+                    await websocket.close(code=1008, reason="Invalid request")
                     return
                 
                 if isinstance(entity_ids, list):
                     valid_ids = [eid for eid in entity_ids if is_valid_uuid(eid)]
 
                     if not valid_ids:
-                        await websocket.close(code=1007)
+                        await websocket.close(code=1007, reason="Invalid JSON")
                         return
                 else:
                     valid_ids = entity_ids
@@ -103,7 +103,7 @@ async def entities_websocket(
         entities_ws_manager.disconnect(websocket)
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
-        await websocket.close(code=1008)
+        await websocket.close(code=1008, reason="Invalid request")
         return
 
 
