@@ -65,7 +65,7 @@ async def entities_websocket(
                 return
             action = message.get("action")
             if not action:
-                await websocket.close(code=1007, reason="Invalid JSON")
+                await websocket.close(code=1008, reason="Invalid request")
                 return
             if action not in {"subscribe", "ping"}:
                 await websocket.close(code=1008, reason="Invalid request")
@@ -79,7 +79,7 @@ async def entities_websocket(
                 if isinstance(entity_ids, list):
                     valid_ids = [eid for eid in entity_ids if is_valid_uuid(eid)]
 
-                    if not valid_ids:
+                    if entity_ids and not valid_ids:
                         await websocket.close(code=1007, reason="Invalid JSON")
                         return
                 else:
