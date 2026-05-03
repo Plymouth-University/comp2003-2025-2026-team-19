@@ -30,6 +30,56 @@ const placeMarkers = [
 ];
 
 // --------------------
+// VESSEL ICON COLOURS
+// --------------------
+// Add/change vessel colour schemes here.
+// The colours are applied in this order:
+// hull, stripe, lowerHull, cabinBase, cabin, window, trim, pipe
+const vesselColourSchemes = [
+  {
+    hull: "#1a1fa3",
+    stripe: "#f2f2f2",
+    lowerHull: "#c4002b",
+    cabinBase: "#6fd6d8",
+    cabin: "#f2f2f2",
+    window: "#1a1a1f",
+    trim: "#f1e600",
+    pipe: "#f2f2f2"
+  },
+  {
+    hull: "#0f766e",
+    stripe: "#f2f2f2",
+    lowerHull: "#dc2626",
+    cabinBase: "#93c5fd",
+    cabin: "#f2f2f2",
+    window: "#1a1a1f",
+    trim: "#facc15",
+    pipe: "#f2f2f2"
+  },
+  {
+    hull: "#7c3aed",
+    stripe: "#f2f2f2",
+    lowerHull: "#ea580c",
+    cabinBase: "#67e8f9",
+    cabin: "#f2f2f2",
+    window: "#1a1a1f",
+    trim: "#fde047",
+    pipe: "#f2f2f2"
+  }
+];
+
+function getVesselColourScheme(vesselId) {
+  let hash = 0;
+
+  for (let i = 0; i < vesselId.length; i++) {
+    hash = vesselId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  const index = Math.abs(hash) % vesselColourSchemes.length;
+  return vesselColourSchemes[index];
+}
+
+// --------------------
 // UI HELPERS
 // --------------------
 
@@ -64,6 +114,53 @@ function getFitPadding() {
   return isMobile
     ? { top: 120, bottom: 80, left: 20, right: 20 }
     : { top: 120, bottom: 40, left: 342, right: 60 };
+}
+
+function updateVesselSource() {
+  if (!map || !map.getSource('vessels')) return;
+
+  const features = Object.values(vessels)
+    .filter(v => v.lat && v.lng)
+    .map(v => {
+      // Direction rule: Stonehouse = left, Cremyll = right
+      let direction = "left";
+      if (v.origin?.toLowerCase().includes("cremyll")) {
+        direction = "right";
+      }
+
+      const colours = getVesselColourScheme(v.id);
+
+      const params = new URLSearchParams({
+        type: "ferry",
+        direction,
+        hull: colours.hull,
+        stripe: colours.stripe,
+        lowerHull: colours.lowerHull,
+        cabinBase: colours.cabinBase,
+        cabin: colours.cabin,
+        window: colours.window,
+        trim: colours.trim,
+        pipe: colours.pipe
+      });
+
+      // Ferry-colour for demo change back to `/assets/icons/icon?${params.toString()}` when done
+      return {
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [v.lng, v.lat]
+        },
+        properties: {
+          id: v.id,
+          icon: `/assets/icons/ferry-colour.svg#${direction}`
+        }
+      };
+    });
+
+  map.getSource('vessels').setData({
+    type: 'FeatureCollection',
+    features
+  });
 }
 
 function fitAllVessels() {
@@ -106,7 +203,9 @@ function syncVesselData(id, lat, lng, extra = {}) {
     vessels[id] = {
       id: id,
       name: extra.name || id.replace(/-/g, ' ').toUpperCase(),
-      route: extra.route.uuid ? `${extra.route.origin} ↔ ${extra.route.destination}` : "No Route",
+      route: extra.route?.uuid ? `${extra.route.origin} ↔ ${extra.route.destination}` : "No Route",
+      origin: extra.route?.origin || "",
+      destination: extra.route?.destination || "",
       status: extra.status || "in_transit",
       speed: 0,
       heading: 0,
@@ -118,6 +217,13 @@ function syncVesselData(id, lat, lng, extra = {}) {
   }
 
   const v = vessels[id];
+
+  v.origin = extra.route?.origin || v.origin || "";
+  v.destination = extra.route?.destination || v.destination || "";
+
+  if (extra.route?.uuid) {
+    v.route = `${v.origin} ↔ ${v.destination}`;
+  }
 
   // 2. Update movement logic
   if (lat && lng) {
@@ -141,15 +247,8 @@ function syncVesselData(id, lat, lng, extra = {}) {
   });
   v.lastUpdated = timestamp;
 
-  // 3. Sync with Map (if map is ready)
-  if (map) {
-    if (!v.marker && lat && lng) {
-      v.marker = createVesselMarker(v);
-    }
-    if (v.marker) {
-      v.marker.setLngLat([lng, lat]);
-    }
-  }
+  // 3. Sync with Map
+  updateVesselSource();
 
   // 4. Update UI
   renderSidebar();
@@ -158,23 +257,7 @@ function syncVesselData(id, lat, lng, extra = {}) {
 /**
  * Create a physical marker on the map for a specific vessel
  */
-function createVesselMarker(v) {
-  const el = document.createElement('div');
-  el.className = `boat-marker ${v.status}`;
 
-  const marker = new maplibregl.Marker({ element: el })
-    .setLngLat([v.lng, v.lat])
-    .addTo(map);
-
-  el.addEventListener("mouseenter", () => showBoatPopup(v));
-  el.addEventListener("mouseleave", () => hoverPopup.remove());
-  el.addEventListener("click", (e) => {
-    e.stopPropagation();
-    focusVessel(v.id);
-  });
-
-  return marker;
-}
 
 // --------------------
 // UI RENDERING
@@ -231,7 +314,7 @@ function renderSidebar() {
 function showBoatPopup(v) {
   const html = `
     <div class="popup-title">${v.name}</div>
-    <div class="popup-row"><span class="popup-muted">Speed</span> <span>${v.speed.toFixed(1)} kts</span></div>
+    <div class="popup-row"><span class="popup-muted">Speed</span> <span>${v.speed !== null ? v.speed.toFixed(1) : 'N/A'} kts</span></div>
     <div class="popup-row"><span class="popup-muted">Dir</span> <span>${formatHeading(v.heading)}</span></div>
   `;
   hoverPopup.setLngLat([v.lng, v.lat]).setHTML(html).addTo(map);
@@ -239,7 +322,7 @@ function showBoatPopup(v) {
 
 function focusVessel(id) {
   const v = vessels[id];
-  if (!map || !v || !v.marker) return;
+  if (!map || !v || !v.lng || !v.lat) return;
 
   map.flyTo({
     center: [v.lng, v.lat],
@@ -290,12 +373,17 @@ function initMap() {
   map.on('load', () => {
     map.setPadding(getFitPadding());
 
-    // Shared Route Line
+    // --------------------
+    // Route line
+    // --------------------
     map.addSource('route', {
       type: 'geojson',
       data: {
         type: 'Feature',
-        geometry: { type: 'LineString', coordinates: routeCoords.map(toLngLat) }
+        geometry: {
+          type: 'LineString',
+          coordinates: routeCoords.map(toLngLat)
+        }
       }
     });
 
@@ -303,23 +391,132 @@ function initMap() {
       id: 'route-line',
       type: 'line',
       source: 'route',
-      paint: { 'line-color': '#5aa7ff', 'line-width': 4 }
+      paint: {
+        'line-color': '#5aa7ff',
+        'line-width': 4
+      }
     });
 
+    // --------------------
+    // Vessel source
+    // --------------------
+    map.addSource('vessels', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: []
+      }
+    });
+
+    // --------------------
+    // Vessel icon layer
+    // --------------------
+    map.addLayer({
+      id: 'vessels-layer',
+      type: 'symbol',
+      source: 'vessels',
+      layout: {
+        'icon-image': ['get', 'icon'],
+        'icon-size': 0.06,
+        'icon-allow-overlap': true
+      }
+    });
+
+    // --------------------
+    // SVG loader
+    // --------------------
+    const existingImages = new Set();
+
+    map.on('styleimagemissing', async (e) => {
+      const id = e.id;
+
+      if (existingImages.has(id)) return;
+      existingImages.add(id);
+
+      try {
+        const url = id;
+
+        const params = new URLSearchParams(url.split("?")[1]);
+        const direction = params.get("direction");
+
+        const response = await fetch(url);
+        let svgText = await response.text();
+
+        if (direction === "right") {
+          const match = svgText.match(/<svg[^>]*>([\s\S]*)<\/svg>/);
+          const viewBoxMatch = svgText.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);
+
+          if (match) {
+            const inner = match[1];
+
+            const width = viewBoxMatch ? parseFloat(viewBoxMatch[1]) : 608;
+            const height = viewBoxMatch ? parseFloat(viewBoxMatch[2]) : 390;
+
+            svgText = `
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">
+                <g transform="translate(${width},0) scale(-1,1)">
+                  ${inner}
+                </g>
+              </svg>
+            `;
+          }
+        }
+
+        const svg = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgText);
+
+        const image = new Image();
+        await new Promise(res => {
+          image.onload = res;
+          image.src = svg;
+        });
+
+        map.addImage(id, image);
+      } catch (err) {
+        console.error('SVG load failed:', err);
+      }
+    });
+
+    // --------------------
+    // Interaction
+    // --------------------
+    map.on('click', 'vessels-layer', (e) => {
+      const id = e.features[0].properties.id;
+      focusVessel(id);
+    });
+
+    map.on('mouseenter', 'vessels-layer', (e) => {
+      map.getCanvas().style.cursor = 'pointer';
+      const v = vessels[e.features[0].properties.id];
+      if (v) showBoatPopup(v);
+    });
+
+    map.on('mouseleave', 'vessels-layer', () => {
+      map.getCanvas().style.cursor = '';
+      hoverPopup.remove();
+    });
+
+    // --------------------
+    // PUB MARKERS
+    // --------------------
     addPlaceMarkers();
 
-    // Handle any vessels that were loaded via WS before the map was ready
-    Object.values(vessels).forEach(v => {
-      if (!v.marker && v.lat && v.lng) v.marker = createVesselMarker(v);
-    });
+    // --------------------
+    // INITIAL DATA SYNC
+    // --------------------
+    updateVesselSource();
 
-    // Map Controls
+    // --------------------
+    // Map controls
+    // --------------------
     document.getElementById("btnZoomIn")?.addEventListener("click", () => map.zoomIn());
     document.getElementById("btnZoomOut")?.addEventListener("click", () => map.zoomOut());
     document.getElementById("btnFit")?.addEventListener("click", () => {
       fitAllVessels();
     });
 
+    // --------------------
+    // Initial fit
+    // --------------------
     if (!hasInitialFit) {
       fitAllVessels();
       hasInitialFit = true;
