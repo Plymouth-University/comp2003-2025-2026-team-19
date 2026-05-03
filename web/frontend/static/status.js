@@ -109,6 +109,7 @@ function calculateBearing(start, end) {
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
 
+// Mobile
 function getFitPadding() {
   const isMobile = window.innerWidth <= 720;
   return isMobile
@@ -198,7 +199,7 @@ function fitAllVessels() {
 let hasInitialFit = false;
 
 function syncVesselData(id, lat, lng, extra = {}) {
-  // 1. Initialize vessel if new
+  // Initialize vessel if new
   if (!vessels[id]) {
     vessels[id] = {
       id: id,
@@ -225,7 +226,7 @@ function syncVesselData(id, lat, lng, extra = {}) {
     v.route = `${v.origin} ↔ ${v.destination}`;
   }
 
-  // 2. Update movement logic
+  // Update movement logic
   if (lat && lng) {
     if (v.lat !== lat || v.lng !== lng) {
       v.heading = calculateBearing([v.lng, v.lat], [lng, lat]);
@@ -247,21 +248,38 @@ function syncVesselData(id, lat, lng, extra = {}) {
   });
   v.lastUpdated = timestamp;
 
-  // 3. Sync with Map
+  // Sync with Map
   updateVesselSource();
-
-  // 4. Update UI
+  
   renderSidebar();
 }
-
-/**
- * Create a physical marker on the map for a specific vessel
- */
 
 
 // --------------------
 // UI RENDERING
 // --------------------
+
+function openVesselList() {
+  document.getElementById("sidebar")?.classList.add("open");
+  document.getElementById("scrim")?.classList.add("open");
+  document.getElementById("btnSidebar")?.setAttribute("aria-label", "Close vessel list");
+}
+
+function closeVesselList() {
+  document.getElementById("sidebar")?.classList.remove("open");
+  document.getElementById("scrim")?.classList.remove("open");
+  document.getElementById("btnSidebar")?.setAttribute("aria-label", "Open vessel list");
+}
+
+function toggleVesselList() {
+  const sidebar = document.getElementById("sidebar");
+
+  if (sidebar?.classList.contains("open")) {
+    closeVesselList();
+  } else {
+    openVesselList();
+  }
+}
 
 function updateCounts() {
   const totalEl = document.getElementById("countAll");
@@ -305,10 +323,16 @@ function renderSidebar() {
         <div style="color: var(--muted)">Updated ${v.lastUpdated}</div>
       </div>
     `;
-    card.addEventListener("click", () => focusVessel(v.id));
+
+    card.addEventListener("click", () => {
+      focusVessel(v.id);
+      closeVesselList();
+    });
+
     vesselList.appendChild(card);
-    updateCounts();
   });
+
+  updateCounts();
 }
 
 function showBoatPopup(v) {
@@ -613,7 +637,7 @@ function TrackerWS({ onUpdate, onStatus, onError }) {
 // --------------------
 
 document.addEventListener('DOMContentLoaded', () => {
-  // 1. Setup UI Clock
+  // Setup UI Clock
   const updateClock = () => {
     const now = new Date();
     const clockEl = document.getElementById("clockText");
@@ -622,17 +646,29 @@ document.addEventListener('DOMContentLoaded', () => {
   updateClock();
   setInterval(updateClock, 10000);
 
-  // 2. Init Map
+  // Init Map
   initMap();
 
-  // 3. Init Tracker
+  // Mobile button sidebar
+  document.getElementById("btnSidebar")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleVesselList();
+  });
+
+  document.getElementById("scrim")?.addEventListener("click", closeVesselList);
+
+  document.getElementById("sidebar")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
+
+  // Init Tracker
   const tracker = TrackerWS({
     onUpdate: (id, lat, lng, extra) => syncVesselData(id, lat, lng, extra),
     onStatus: (s) => console.log("Tracker:", s),
     onError: (e) => console.error("Tracker Error:", e)
   });
 
-  // 4. Subscribe based on URL or defaults
+  // Subscribe based on URL or defaults
   let params = new URLSearchParams(window.location.search);
   let entityIds = params.get("entity_ids");
   if (entityIds) {
