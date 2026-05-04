@@ -4,12 +4,14 @@
 
 let map, hoverPopup;
 const vessels = {}; // Collection of vessel objects keyed by ID
+const loadedRoutes = new Set(); // Track which routes have been loaded
+let globalRouteBounds = null;
 
-// Default route for visual reference
-const routeCoords = [
-  { lat: 50.36549641988576, lng: -4.164723457671051 }, // Stonehouse
-  { lat: 50.36086978940922, lng: -4.174937309091103 }  // Cremyll
-];
+// // Default route for visual reference
+// const routeCoords = [
+//   { lat: 50.36549641988576, lng: -4.164723457671051 }, // Stonehouse
+//   { lat: 50.36086978940922, lng: -4.174937309091103 }  // Cremyll
+// ];
 
 const toLngLat = p => [p.lng, p.lat];
 
@@ -46,30 +48,39 @@ function calculateBearing(start, end) {
 function getFitPadding() {
   const isMobile = window.innerWidth <= 720;
   return isMobile
-    ? { top: 120, bottom: 80, left: 20, right: 20 }
-    : { top: 120, bottom: 40, left: 342, right: 60 };
+    ? { top: 100, bottom: 80, left: 20, right: 20 }
+    : { top: 100, bottom: 60, left: 320, right: 20 };
 }
 
 function fitAllVessels() {
   if (!map) return;
 
   const bounds = new maplibregl.LngLatBounds();
-  const activeVessels = Object.values(vessels).filter(v => v.lng !== null && v.lat !== null);
 
+  // 1. Include the static routes in the bounding box
+  if (globalRouteBounds) {
+    bounds.extend(globalRouteBounds.getSouthWest());
+    bounds.extend(globalRouteBounds.getNorthEast());
+  }
+
+  // 2. Include the active vessels in the bounding box
+  const activeVessels = Object.values(vessels).filter(v => v.lng !== null && v.lat !== null);
   if (activeVessels.length > 0) {
-    routeCoords.forEach(p => bounds.extend([p.lng, p.lat]));
     activeVessels.forEach(v => {
       bounds.extend([v.lng, v.lat]);
     });
-  } else {
-    routeCoords.forEach(p => bounds.extend([p.lng, p.lat]));
   }
 
-  // Safety check: ensure bounds are not empty before fitting
+  // 3. Center the map to the exact middle of the bounds
   if (!bounds.isEmpty()) {
-    map.fitBounds(bounds, {
-      maxZoom: 16,
+    // Get the exact mathematical center of all the route lines and vessels
+    const middlePoint = bounds.getCenter();
+
+    map.flyTo({
+      center: middlePoint, // Explicitly point the camera at the middle
+      zoom: 13.5,          // Set a fixed zoom (adjust this to look best for your specific ferry route)
       duration: 1000,
+      padding: getFitPadding(), // Still respects the sidebar/header offsets!
       essential: true
     });
   }
@@ -85,7 +96,9 @@ function fitAllVessels() {
 let hasInitialFit = false;
 
 function syncVesselData(id, lat, lng, extra = {}) {
-  // 1. Initialize vessel if new
+  // 1. Initialize vessel if new and extract route info if available
+  const routeUuid = extra.route ? extra.route.uuid : null;
+
   if (!vessels[id]) {
     vessels[id] = {
       id: id,
@@ -99,6 +112,10 @@ function syncVesselData(id, lat, lng, extra = {}) {
       marker: null,
       lastUpdated: null
     };
+  }
+
+  if (routeUuid) {
+    ensureRouteOnMap(routeUuid);
   }
 
   const v = vessels[id];
@@ -242,7 +259,7 @@ function initMap() {
   map = new maplibregl.Map({
     container: 'map',
     style: 'https://tiles.stadiamaps.com/styles/osm_bright.json',
-    center: [routeCoords[0].lng, routeCoords[0].lat],
+    center: [-4.164723457671051, 50.36549641988576],
     zoom: 14,
     dragRotate: false
   });
@@ -251,22 +268,6 @@ function initMap() {
 
   map.on('load', () => {
     map.setPadding(getFitPadding());
-
-    // Shared Route Line
-    map.addSource('route', {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        geometry: { type: 'LineString', coordinates: routeCoords.map(toLngLat) }
-      }
-    });
-
-    map.addLayer({
-      id: 'route-line',
-      type: 'line',
-      source: 'route',
-      paint: { 'line-color': '#5aa7ff', 'line-width': 4 }
-    });
 
     // Handle any vessels that were loaded via WS before the map was ready
     Object.values(vessels).forEach(v => {
@@ -369,6 +370,58 @@ function TrackerWS({ onUpdate, onStatus, onError }) {
   };
 
   return { subscribe };
+}
+
+// --------------------
+// MAP LOGIC
+// --------------------
+async function ensureRouteOnMap(routeUuid) {
+  if (!map || !routeUuid || loadedRoutes.has(routeUuid)) return;
+
+  loadedRoutes.add(routeUuid);
+
+  try {
+    // 1. Fetch the GeoJSON manually so we can read the coordinates
+    const response = await fetch(`/api/v1/routes/${routeUuid}/trajectory`);
+    const geojson = await response.json();
+
+    // 2. Update the global route bounds
+    if (geojson.features && geojson.features.length > 0) {
+      if (!globalRouteBounds) globalRouteBounds = new maplibregl.LngLatBounds();
+
+      const coords = geojson.features[0].geometry.coordinates;
+      coords.forEach(coord => {
+        globalRouteBounds.extend(coord);
+      });
+    }
+
+    const routeColor = geojson.features[0]?.properties?.color || '#5aa7ff';
+
+    // 3. Add to map using the fetched data
+    const sourceId = `route-${routeUuid}`;
+    map.addSource(sourceId, {
+      type: 'geojson',
+      data: geojson
+    });
+
+    map.addLayer({
+      id: `route-line-${routeUuid}`,
+      type: 'line',
+      source: sourceId,
+      paint: {
+        'line-color': routeColor,
+        'line-width': 4,
+        'line-opacity': 0.7
+      }
+    });
+
+    // 4. Trigger a re-center now that the route is loaded
+    fitAllVessels();
+
+  } catch (error) {
+    console.error(`Failed to load route ${routeUuid}:`, error);
+    loadedRoutes.delete(routeUuid); // Allow retry if it failed
+  }
 }
 
 // --------------------

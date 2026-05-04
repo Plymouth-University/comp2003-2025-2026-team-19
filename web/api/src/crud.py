@@ -6,7 +6,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import aliased, selectinload
 
 from core.database import AsyncSession
-from core.models import Entity, EntityOnRoute, GPSTelemetry, Location, Route
+from core.models import Entity, EntityOnRoute, GPSTelemetry, Location, Point, Route
 
 from .exceptions import EntityNotFoundError
 from .schema.entity import ReadEntity
@@ -102,4 +102,52 @@ async def get_entities_info(
             ),
         }
         for row in rows
+    }
+
+
+async def get_route_trajectory_geojson(
+    db: AsyncSession, route_uuid: UUID
+) -> dict | None:
+    # 1. Fetch the route and its attributes
+    route_stmt = (
+        select(Route)
+        .options(selectinload(Route.attributes))
+        .where(Route.uuid == route_uuid)
+    )
+    route_res = await db.execute(route_stmt)
+    route = route_res.scalar_one_or_none()
+
+    if not route:
+        return None
+
+    # 2. Extract the color
+    route_color = "#5aa7ff"
+    for attr in route.attributes:
+        if attr.key == "color":
+            route_color = attr.value
+            break
+
+    # 3. Get the points
+    stmt = (
+        select(func.ST_X(Point.geom).label("lng"), func.ST_Y(Point.geom).label("lat"))
+        .where(Point.route_id == route.id)
+        .order_by(Point.sequence)
+    )
+    points_res = await db.execute(stmt)
+    coordinates = [[row.lng, row.lat] for row in points_res.all()]
+
+    # 4. Inject color into properties
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "LineString", "coordinates": coordinates},
+                "properties": {
+                    "route_uuid": str(route_uuid),
+                    "point_count": len(coordinates),
+                    "color": route_color,
+                },
+            }
+        ],
     }
