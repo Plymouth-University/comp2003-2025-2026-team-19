@@ -17,8 +17,9 @@ router = APIRouter(tags=["websockets"])
 
 logger = logging.getLogger("uvicorn")
 
+
 def is_valid_uuid(val):
-    try: 
+    try:
         UUID(str(val))
         return True
     except ValueError:
@@ -43,13 +44,20 @@ class TrackingWebSocketManager:
             self.subscriptions[eid].discard(websocket)
 
     async def broadcast(self, entity_id: str, data: dict):
-        if entity_id in self.subscriptions:
-            for connection in self.subscriptions[entity_id]:
+        if entity_id not in self.subscriptions:
+            return
+        dead: set[WebSocket] = set()
+        for connection in self.subscriptions[entity_id]:
+            try:
                 payload = {"type": "update", "data": data}
                 await connection.send_json(payload)
+            except Exception:
+                dead.add(connection)
+        self.subscriptions[entity_id] -= dead
 
 
 entities_ws_manager = TrackingWebSocketManager()
+
 
 @router.websocket("/entities/ws")
 async def entities_websocket(
@@ -60,9 +68,14 @@ async def entities_websocket(
         while True:
             try:
                 message: dict = await websocket.receive_json()
+            except WebSocketDisconnect:
+                # Client closed the connection cleanly — propagate to outer handler
+                raise
             except Exception:
+                # Malformed data — close with a protocol error and stop
                 await websocket.close(code=1007, reason="Invalid JSON")
                 return
+
             action = message.get("action")
             if not action:
                 await websocket.close(code=1007, reason="Invalid JSON")
@@ -70,12 +83,13 @@ async def entities_websocket(
             if action not in {"subscribe", "ping"}:
                 await websocket.close(code=1008, reason="Invalid request")
                 return
+
             if action == "subscribe":
                 entity_ids = message.get("entity_ids", [])
                 if entity_ids != "all" and not isinstance(entity_ids, list):
                     await websocket.close(code=1008, reason="Invalid request")
                     return
-                
+
                 if isinstance(entity_ids, list):
                     valid_ids = [eid for eid in entity_ids if is_valid_uuid(eid)]
 
@@ -84,7 +98,7 @@ async def entities_websocket(
                         return
                 else:
                     valid_ids = entity_ids
-                
+
                 entity_info = await crud.get_entities_info(db, valid_ids)
 
                 await entities_ws_manager.subscribe(websocket, list(entity_info.keys()))
@@ -95,16 +109,16 @@ async def entities_websocket(
                         "entities": entity_info,
                     }
                 )
+
             elif action == "ping":
-                await websocket.send_json({
-                    "type": "pong" #For websocket checker in the settings
-            })
+                await websocket.send_json(
+                    {"type": "pong"}  # For websocket checker in the settings
+                )
+
     except WebSocketDisconnect:
         entities_ws_manager.disconnect(websocket)
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
-        await websocket.close(code=1008, reason="Invalid request")
-        return
 
 
 async def redis_listener():
@@ -133,7 +147,9 @@ async def redis_listener():
                             data = json.loads(message["data"])
                             entity_id = data.get("entity_id")
                             if entity_id:
-                                await entities_ws_manager.broadcast(str(entity_id), data)
+                                await entities_ws_manager.broadcast(
+                                    str(entity_id), data
+                                )
                         except json.JSONDecodeError:
                             logger.error(f"Malformed JSON received: {message['data']}")
                         except Exception as e:
