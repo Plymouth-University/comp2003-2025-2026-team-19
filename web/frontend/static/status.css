@@ -38,6 +38,19 @@ body {
   inset: 0;
 }
 
+/* Pub marker */
+.place-marker {
+  display: block;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
 /* Boat marker */
 .boat-marker {
   width: 28px;

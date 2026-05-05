@@ -16,6 +16,7 @@ WORKDIR /app
 COPY --from=builder /build/.venv /app/.venv
 
 COPY ./web/api/src /app/src
+COPY ./web/api/assets /app/assets
 COPY ./core /app/core
 
 ENV PATH="/app/.venv/bin:$PATH" \

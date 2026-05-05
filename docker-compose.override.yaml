@@ -7,6 +7,9 @@ services:
           path: ./web/api/src
           target: /app/src
         - action: sync
+          path: ./web/api/assets
+          target: /app/assets
+        - action: sync
           path: ./core
           target: /app/core
         - action: rebuild

@@ -19,6 +19,7 @@ from .routes import (
     websocket_router,
     admin_router,
     routes_router,
+    icon_router,
 )
 from .routes.websockets import redis_listener
 
@@ -52,5 +53,6 @@ app = FastAPI(lifespan=lifespan, root_path="/api/v1")
 app.include_router(health_router)
 app.include_router(websocket_router)
 app.include_router(entity_router)
+app.include_router(icon_router)
 app.include_router(routes_router)
 app.include_router(admin_router)
