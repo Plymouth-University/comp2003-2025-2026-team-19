@@ -115,8 +115,8 @@ function calculateBearing(start, end) {
 function getFitPadding() {
   const isMobile = window.innerWidth <= 720;
   return isMobile
-    ? { top: 100, bottom: 80, left: 20, right: 20 }
-    : { top: 100, bottom: 60, left: 320, right: 20 };
+    ? { top: 120, bottom: 100, left: 40, right: 40 }
+    : { top: 120, bottom: 60, left: 340, right: 30 };
 }
 
 function updateVesselSource() {
@@ -187,14 +187,10 @@ function fitAllVessels() {
 
   // 3. Center the map to the exact middle of the bounds
   if (!bounds.isEmpty()) {
-    // Get the exact mathematical center of all the route lines and vessels
-    const middlePoint = bounds.getCenter();
-
-    map.flyTo({
-      center: middlePoint, // Explicitly point the camera at the middle
-      zoom: 13.5,          // Set a fixed zoom (adjust this to look best for your specific ferry route)
+    map.fitBounds(bounds, {
+      // padding: getFitPadding(),
+      maxZoom: 16,      // Don't zoom in too close if there's only one vessel
       duration: 1000,
-      padding: getFitPadding(), // Still respects the sidebar/header offsets!
       essential: true
     });
   }
