@@ -6,14 +6,8 @@ let map, hoverPopup;
 const vessels = {}; // Collection of vessel objects keyed by ID
 const loadedRoutes = new Set(); // Track which routes have been loaded
 let globalRouteBounds = null;
-
-// // Default route for visual reference
-// const routeCoords = [
-//   { lat: 50.36549641988576, lng: -4.164723457671051 }, // Stonehouse
-//   { lat: 50.36086978940922, lng: -4.174937309091103 }  // Cremyll
-// ];
-
-const toLngLat = p => [p.lng, p.lat];
+const pendingRoutes = new Set(); // Routes waiting for map to be ready
+let mapReady = false;
 
 // Pub markers
 const placeMarkers = [
@@ -164,6 +158,8 @@ function updateVesselSource() {
     type: 'FeatureCollection',
     features
   });
+
+
 }
 
 function fitAllVessels() {
@@ -410,29 +406,6 @@ function initMap() {
   map.on('load', () => {
     map.setPadding(getFitPadding());
 
-    // --------------------
-    // Route line
-    // --------------------
-    map.addSource('route', {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: routeCoords.map(toLngLat)
-        }
-      }
-    });
-
-    map.addLayer({
-      id: 'route-line',
-      type: 'line',
-      source: 'route',
-      paint: {
-        'line-color': '#5aa7ff',
-        'line-width': 4
-      }
-    });
 
     // --------------------
     // Vessel source
@@ -454,7 +427,7 @@ function initMap() {
       source: 'vessels',
       layout: {
         'icon-image': ['get', 'icon'],
-        'icon-size': 0.06,
+        'icon-size': 0.5,
         'icon-allow-overlap': true
       }
     });
@@ -467,14 +440,16 @@ function initMap() {
     map.on('styleimagemissing', async (e) => {
       const id = e.id;
 
+      // Only handle our own asset icons, ignore map sprite images
+      if (!id.startsWith('/assets/')) return;
+
       if (existingImages.has(id)) return;
       existingImages.add(id);
 
       try {
-        const url = id;
-
-        const params = new URLSearchParams(url.split("?")[1]);
-        const direction = params.get("direction");
+        const hashIndex = id.indexOf('#');
+        const direction = hashIndex !== -1 ? id.slice(hashIndex + 1) : 'left';
+        const url = hashIndex !== -1 ? id.slice(0, hashIndex) : id;
 
         const response = await fetch(url);
         let svgText = await response.text();
@@ -482,35 +457,37 @@ function initMap() {
         if (direction === "right") {
           const match = svgText.match(/<svg[^>]*>([\s\S]*)<\/svg>/);
           const viewBoxMatch = svgText.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);
-
           if (match) {
             const inner = match[1];
-
             const width = viewBoxMatch ? parseFloat(viewBoxMatch[1]) : 608;
             const height = viewBoxMatch ? parseFloat(viewBoxMatch[2]) : 390;
-
             svgText = `
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">
-                <g transform="translate(${width},0) scale(-1,1)">
-                  ${inner}
-                </g>
-              </svg>
-            `;
+                <g transform="translate(${width},0) scale(-1,1)">${inner}</g>
+              </svg>`;
           }
         }
 
         const svg = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgText);
-
         const image = new Image();
-        await new Promise(res => {
+
+        await new Promise((res, rej) => {
           image.onload = res;
+          image.onerror = rej; // catch broken SVGs
           image.src = svg;
         });
 
         map.addImage(id, image);
+        map.triggerRepaint();
+
       } catch (err) {
         console.error('SVG load failed:', err);
+        existingImages.delete(id); // allow retry on next render
       }
+
+      mapReady = true;
+      pendingRoutes.forEach(uuid => ensureRouteOnMap(uuid));
+      pendingRoutes.clear();
     });
 
     // --------------------
@@ -530,10 +507,6 @@ function initMap() {
     map.on('mouseleave', 'vessels-layer', () => {
       map.getCanvas().style.cursor = '';
       hoverPopup.remove();
-    });
-    // Handle any vessels that were loaded via WS before the map was ready
-    Object.values(vessels).forEach(v => {
-      if (!v.marker && v.lat && v.lng) v.marker = createVesselMarker(v);
     });
 
     // --------------------
@@ -653,8 +626,14 @@ function TrackerWS({ onUpdate, onStatus, onError }) {
 // MAP LOGIC
 // --------------------
 async function ensureRouteOnMap(routeUuid) {
-  if (!map || !routeUuid || loadedRoutes.has(routeUuid)) return;
+  if (!routeUuid) return;
 
+  if (!mapReady) {
+    pendingRoutes.add(routeUuid);
+    return;
+  }
+
+  if (loadedRoutes.has(routeUuid)) return;
   loadedRoutes.add(routeUuid);
 
   try {
