@@ -19,6 +19,7 @@ from .routes import (
     websocket_router,
     admin_router,
     routes_router,
+    icon_router,
 )
 from .routes.websockets import redis_listener
 
