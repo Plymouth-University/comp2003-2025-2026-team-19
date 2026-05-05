@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 
 import fastapi
 from fastapi import Request, Depends, HTTPException
@@ -22,8 +23,13 @@ from pathlib import Path
 
 load_dotenv()
 
-templates = Jinja2Templates(directory="static/")
-static = StaticFiles(directory="static/")
+BASE_DIR = Path(__file__).resolve().parent
+
+# Define paths relative to this file
+STATIC_DIR = BASE_DIR / "static"
+
+templates = Jinja2Templates(directory=str(STATIC_DIR))
+static = StaticFiles(directory=str(STATIC_DIR))
 
 BASE_DIR = Path(__file__).resolve().parent
 assets_dir = BASE_DIR / "assets"
