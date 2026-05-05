@@ -72,6 +72,25 @@ async def get_status(
     )
 
 
+@app.get("/admin/routes")
+async def admin_routes(request: fastapi.Request) -> fastapi.responses.HTMLResponse:
+    """Returns the admin routes page.
+    Args:
+        request (fastapi.Request): The incoming request object.
+
+    Returns:
+        fastapi.responses.HTMLResponse: The rendered admin routes HTML page.
+    """
+    return templates.TemplateResponse(
+        "admin_routes.html",
+        {
+            "request": request,
+            "env": settings.ENVIRONMENT,
+            "sentry_script_url": settings.SENTRY_SCRIPT_URL,
+        },
+    )
+
+
 @app.get("/health")
 async def get_health():
     """Return a health check message.

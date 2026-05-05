@@ -147,10 +147,24 @@ services:
       - "8883:8883"
     environment:
       - DOCKER_VERNEMQ_ACCEPT_EULA=yes
+      - DOCKER_VERNEMQ_ACCEPT_EULA=yes
+      - DOCKER_VERNEMQ_ALLOW_ANONYMOUS=off
+      - DOCKER_VERNEMQ_PLUGINS__VMQ_PASSWD=off
+      - DOCKER_VERNEMQ_PLUGINS__VMQ_ACL=off
+      - DOCKER_VERNEMQ_PLUGINS__VMQ_WEBHOOKS=on
+      - DOCKER_VERNEMQ_VMQ_WEBHOOKS__AUTH_ON_REGISTER__HOOK=auth_on_register
+      - DOCKER_VERNEMQ_VMQ_WEBHOOKS__AUTH_ON_REGISTER__ENDPOINT=http://mqtt-auth:8080/auth/register
+      - DOCKER_VERNEMQ_VMQ_WEBHOOKS__AUTH_ON_SUBSCRIBE__HOOK=auth_on_subscribe
+      - DOCKER_VERNEMQ_VMQ_WEBHOOKS__AUTH_ON_SUBSCRIBE__ENDPOINT=http://mqtt-auth:8080/auth/subscribe
+      - DOCKER_VERNEMQ_VMQ_WEBHOOKS__AUTH_ON_PUBLISH__HOOK=auth_on_publish
+      - DOCKER_VERNEMQ_VMQ_WEBHOOKS__AUTH_ON_PUBLISH__ENDPOINT=http://mqtt-auth:8080/auth/publish
+      - DOCKER_VERNEMQ_LISTENER__SSL__DEFAULT=0.0.0.0:8883
+      - DOCKER_VERNEMQ_LISTENER__SSL__DEFAULT__CAFILE=/etc/vernemq/certs/ca.crt
+      - DOCKER_VERNEMQ_LISTENER__SSL__DEFAULT__CERTFILE=/etc/vernemq/certs/broker.crt
+      - DOCKER_VERNEMQ_LISTENER__SSL__DEFAULT__KEYFILE=/etc/vernemq/certs/broker.key
     volumes:
-      - ./mqtt/config/vernemq.conf:/vernemq/vernemq.conf.template:ro
       - ./mqtt/config/certs:/etc/vernemq/certs:ro
-    entrypoint: ["/bin/sh", "-c", "cp /vernemq/vernemq.conf.template /etc/vernemq/vernemq.conf && exec start_vernemq"]
+    # entrypoint: ["/bin/sh", "-c", "cp /vernemq/vernemq.conf.template /etc/vernemq/vernemq.conf && exec start_vernemq"]
     depends_on:
       mqtt-auth:
         condition: service_healthy
