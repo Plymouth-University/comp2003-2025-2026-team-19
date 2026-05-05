@@ -1,0 +1,237 @@
+:root {
+  --bg: #0b1020;
+  --fg: #e6ebff;
+  --muted: #9aa3b2;
+  --accent: #5aa7ff;
+  --panel: rgba(0, 30, 100, 0.82);
+  --panel2: rgba(0, 30, 100, 0.82);
+  --stroke: rgba(255,255,255,.08);
+  --handle: #ffffff;
+  --shadow: 0 12px 32px rgba(0,0,0,.45);
+
+  --green:#22c55e;
+  --amber:#f59e0b;
+  --red:#ef4444;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+main{
+  height:100vh;
+  padding:20px;
+  box-sizing:border-box;
+}
+
+.top_bar {
+  padding:15px 25px;
+  font-size:28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dashboard{
+  display:grid;
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 360px 1fr 1fr;
+  gap: 20px;
+  height:calc(100% - 60px);
+}
+
+.panel{
+  background: var(--panel);
+  border-radius: 20px;
+  border:1px solid var(--stroke);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.graph_panel{
+  grid-column:1 / span 2;
+}
+
+.stats_panel{
+  grid-column: 1;
+}
+
+.security_panel{
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.trackers_panel{
+  grid-column: 2;
+  grid-row:2 / span 2;
+
+  display: flex;
+  flex-direction: column;
+}
+
+html, body {
+    height: 100%;
+    margin: 0;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    color: whitesmoke;
+}
+
+.nice_text {
+    font-family: "Josefin Sans", sans-serif;
+    font-weight: 600;
+    font-optical-sizing: auto;
+    font-size: 22px;
+    font-style: normal;
+    letter-spacing: 0.3px;
+}
+
+#entity_list_container {
+    padding: 0;
+    margin: 0;
+}
+
+#entity_list_container li {
+    padding: 10px;
+    background: rgba(2, 141, 255, 0.475);
+    opacity: 75%;
+    margin: 5px 0;
+    list-style: none;
+    cursor: pointer;
+    display: block;
+    border-radius: 999px;
+    border: 1px solid black;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#entity_list_container li:hover {
+    background: rgba(0, 78, 142, 0.475);
+}
+
+#entity_list_container li a {
+    color: white;
+    text-decoration: none;
+    white-space: normal;
+}
+
+.status_row {
+  margin-top: 6px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status_circle {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block
+}
+
+.status-green {
+  background: #2ecc71;
+}
+
+.status-red {
+  background: #e74c3c;
+}
+.timestamp {
+  margin-left: 10px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* Used for the customised scrollbar*/
+.trackers_scroll{
+  margin-top: 10px;
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(24, 146, 247, 0.8) rgba(255,255,255,0.08);
+}
+
+.trackers_scroll::-webkit-scrollbar{
+  width: 10px;
+}
+
+.trackers_scroll::-webkit-scrollbar-track{
+  background: rgba(255,255,255,0.8);
+  border-radius: 20px;
+}
+
+.trackers_scroll::-webkit-scrollbar-thumb{
+  background: var(--accent);
+  border-radius: 20px;
+  border: 2px solid rgba(0,0,0,0);
+  background-clip: padding-box;
+}
+
+.trackers_scroll::-webkit-scrollbar-thumb:hover{
+  background: #7cbcff;
+}
+
+/*Dupe scroll for the security container*/
+/* Used for the customised scrollbar*/
+.security_scroll{
+  max-height: 150px;
+  margin-top: 10px;
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(24, 146, 247, 0.8) rgba(255,255,255,0.08);
+}
+
+.security_scroll::-webkit-scrollbar{
+  width: 10px;
+}
+
+.security_scroll::-webkit-scrollbar-track{
+  background: rgba(255,255,255,0.8);
+  border-radius: 20px;
+}
+
+.security_scroll::-webkit-scrollbar-thumb{
+  background: var(--accent);
+  border-radius: 20px;
+  border: 2px solid rgba(0,0,0,0);
+  background-clip: padding-box;
+}
+
+.security_scroll::-webkit-scrollbar-thumb:hover{
+  background: #7cbcff;
+}
+
+/*Settings customisation*/
+
+.settings_button{
+  padding: 10px 18px;
+  border-radius: 12px;
+  border: none;
+  background: rgba(2, 141, 255, 0.475);
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.settings_button:hover{
+  opacity: 0.9;
+}
+
+.settings_panel{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: none;
+  justify-content: center;
+  align-items: center;
+}
+
+.settings_content {
+  background: var(--panel);
+  padding: 40px;
+  border-radius: 20px;
+  min-width: 400px;
+}

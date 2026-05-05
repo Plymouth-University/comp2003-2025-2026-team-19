@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Page</title>
+  <meta name="description" content="Allows Admin to check status of ferries" />
+  <link rel="stylesheet" href="/static/admin_page.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+</head>
+<body>
+
+<header class="top_bar">
+  <h1 class="nice_text">Admin Panel</h1>
+  <button class="settings_button" onclick="openSettings()">
+    Settings
+  </button>
+</header>
+
+<!--Html for main grid layout-->
+<main>
+  <div class="dashboard">
+     
+    <div class="panel graph_panel">
+      <p class="nice_text">Activity Graph</p>
+      <div style="position: relative; width: 100%; height: 200px;">
+        <canvas id="activityChart"></canvas>
+      </div>
+    </div>
+  
+    <div class="panel stats_panel">
+      <p class="nice_text">Server Statistics</p>
+        <div class="stat">
+          <span class="stat_label">Total Requests: </span>
+          <span id="stat-total">-</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Average Latency: </span>
+          <span id="stat-avg-latency">-</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Status Codes: </span>
+          <span id="stat-statuses">-</span>
+        </div>
+    </div>
+
+    <div class="panel trackers_panel">
+      <p class="nice_text">Trackers</p>
+      <div class="trackers_scroll">
+        <ul id="entity_list_container"></ul>
+      </div>
+    </div>
+
+   <div class=" panel security_panel">
+      <p class="nice_text">Security Alerts & Issues</p>
+      <div class="security_scroll">
+        <ul id="security_list"></ul>
+      </div>
+   </div>
+</div>
+
+<!--Settings button-->
+<div id="settings_panel" class="settings_panel">
+  <div class="settings_content">
+    <h1>Settings</h1>
+    <div class="settings_section">
+      <p class="settings_label">Alert Settings</p>
+      <label class="settings_toggle">
+        <input type="checkbox" id="mute_404" onchange="saveSetting('mute_404', this.checked)">
+        Mute 404 alerts
+      </label>
+      <label class="settings_toggle">
+        <input type="checkbox" id="mute_slow" onchange="saveSetting('mute_slow', this.checked)">
+        Mute slow response
+      </label>
+      <br>
+      <button class="settings_btn_clear" onclick="clearAlerts()">Clear security alerts</button>
+    </div>
+    <div class="settings_section">
+      <p class="settings_label">Activity Bar Settings</p>
+      Bar interval (seconds)
+    <label class="settings_toggle">
+      <input type="number" id="barInterval" min="2" max="60" value="3" 
+        onchange="saveSetting('barInterval', Number(this.value))">
+      <br>
+      <input type="checkbox" id="pause_bars" onchange="saveSetting('pause_bars', this.checked)">
+      Pause Activity Chart
+      </label>
+    </div>
+
+    <div class="settings_section">
+      <p class="settings_label">Test Websocket</p>
+      <button class="settings_test_websocket" onclick="testWebsocket()">Test Websocket</button>
+      <span id="ws_status">Not tested</span>
+    </div>
+
+    <div class="settings_section">
+      <p class="settings_label">Export to JSON</p>
+      <button class="settings_btn" onclick="exportAlerts()">Export alerts</button>
+      <button class="settings_btn" onclick="exportMetrics()">Export metrics</button>
+    </div>
+    <br>
+    <button class="settings_btn_close" onclick="closeSettings()">Close</button>
+  </div>
+</div>
+
+<!--Javascript-->
+<script src="/static/admin_page.js"></script>
+
+</body>
+</html>

@@ -1,23 +1,28 @@
 import asyncio
 import json
 import logging
-from typing import Annotated, Literal, Union
-from uuid import UUID
 
 import redis.asyncio as redis
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from geoalchemy2.shape import to_shape
-from pydantic import BaseModel, BeforeValidator, Field, ValidationError
 
 from core.database import AsyncSession, get_db_session
-from core.helpers import filter_uuids
 from core.settings import settings
+
+from uuid import UUID
 
 from .. import crud
 
 router = APIRouter(tags=["websockets"])
 
 logger = logging.getLogger("uvicorn")
+
+def is_valid_uuid(val):
+    try: 
+        UUID(str(val))
+        return True
+    except ValueError:
+        return False
 
 
 class TrackingWebSocketManager:
@@ -44,62 +49,45 @@ class TrackingWebSocketManager:
                 await connection.send_json(payload)
 
 
-ws_manager = TrackingWebSocketManager()
-
-
-SafeUUIDList = Annotated[list[UUID], BeforeValidator(filter_uuids)]
-
-
-class SubscribeAction(BaseModel):
-    action: Literal["subscribe"]
-    entity_ids: SafeUUIDList | Literal["all"] | None = None
-
-
-WSAction = Union[SubscribeAction]
-
-
-class WSRequest(BaseModel):
-    data: WSAction = Field(..., discriminator="action")
-
+entities_ws_manager = TrackingWebSocketManager()
 
 @router.websocket("/entities/ws")
 async def entities_websocket(
     websocket: WebSocket, db: AsyncSession = Depends(get_db_session)
 ):
-    await ws_manager.connect(websocket)
+    await entities_ws_manager.connect(websocket)
     try:
         while True:
             try:
-                raw_data: dict = await websocket.receive_json()
-                request = WSRequest(data=raw_data)  # type: ignore
-                data = request.data
-            except json.JSONDecodeError:
+                message: dict = await websocket.receive_json()
+            except Exception:
                 await websocket.close(code=1007, reason="Invalid JSON")
-                ws_manager.disconnect(websocket)
-                break
-            except ValidationError as e:
-                # Catch missing fields or invalid action names
-                errors = e.errors()
-                if errors[0]["type"] == "union_tag_invalid":
-                    await websocket.close(code=1008, reason="Invalid action")
-                elif errors[0]["type"] == "union_tag_not_found":
-                    await websocket.close(code=1007, reason="Missing action")
-                else:
-                    await websocket.close(code=1008, reason=str(errors))
-                ws_manager.disconnect(websocket)
-                break
-            if data.action == "subscribe":
-                if data.entity_ids is not None:
-                    entity_ids = (
-                        [e for e in data.entity_ids if type(e) == UUID]
-                        if type(data.entity_ids) == list
-                        else data.entity_ids
-                    )
-                    entity_info = await crud.get_entities_info(db, entity_ids)
+                return
+            action = message.get("action")
+            if not action:
+                await websocket.close(code=1007, reason="Invalid JSON")
+                return
+            if action not in {"subscribe", "ping"}:
+                await websocket.close(code=1008, reason="Invalid request")
+                return
+            if action == "subscribe":
+                entity_ids = message.get("entity_ids", [])
+                if entity_ids != "all" and not isinstance(entity_ids, list):
+                    await websocket.close(code=1008, reason="Invalid request")
+                    return
+                
+                if isinstance(entity_ids, list):
+                    valid_ids = [eid for eid in entity_ids if is_valid_uuid(eid)]
 
-                    await ws_manager.subscribe(websocket, list(entity_info.keys()))
+                    if entity_ids and not valid_ids:
+                        await websocket.close(code=1007, reason="Invalid JSON")
+                        return
                 else:
-                    entity_info = {}
+                    valid_ids = entity_ids
+                
+                entity_info = await crud.get_entities_info(db, valid_ids)
+
+                await entities_ws_manager.subscribe(websocket, list(entity_info.keys()))
 
                 await websocket.send_json(
                     {
@@ -107,14 +95,16 @@ async def entities_websocket(
                         "entities": entity_info,
                     }
                 )
-            else:
-                await websocket.close(code=1008, reason="Invalid action")
-                ws_manager.disconnect(websocket)
-                break
+            elif action == "ping":
+                await websocket.send_json({
+                    "type": "pong" #For websocket checker in the settings
+            })
     except WebSocketDisconnect:
-        ws_manager.disconnect(websocket)
+        entities_ws_manager.disconnect(websocket)
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
+        await websocket.close(code=1008, reason="Invalid request")
+        return
 
 
 async def redis_listener():
@@ -143,7 +133,7 @@ async def redis_listener():
                             data = json.loads(message["data"])
                             entity_id = data.get("entity_id")
                             if entity_id:
-                                await ws_manager.broadcast(str(entity_id), data)
+                                await entities_ws_manager.broadcast(str(entity_id), data)
                         except json.JSONDecodeError:
                             logger.error(f"Malformed JSON received: {message['data']}")
                         except Exception as e:
