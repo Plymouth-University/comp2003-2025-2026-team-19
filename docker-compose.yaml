@@ -172,8 +172,8 @@ services:
 
   replay:
     build:
-      context: ./replay
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./replay/Dockerfile
     restart: unless-stopped
     env_file:
       - .env
