@@ -10,6 +10,6 @@ RUN pip install --no-cache-dir \
     shapely==2.* \
     python-dotenv==1.*
 
-COPY main.py .
+COPY ./replay/main.py .
 
 CMD ["python", "main.py"]
