@@ -170,6 +170,23 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  replay:
+    build:
+      context: ./replay
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - REPLAY_SPEED=${REPLAY_SPEED:-1.0}
+    depends_on:
+      postgis:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+
 volumes:
   ferrytracker_postgres:
   mqtt_data:
